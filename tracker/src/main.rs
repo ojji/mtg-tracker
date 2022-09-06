@@ -2,7 +2,7 @@ use injector::assembler::Assembler;
 use injector::process::{processes, Module, Process};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut mtga_process = find_mtga_process()?;
+    let mtga_process = find_mtga_process()?;
     let mono_module = find_mono_module(&mtga_process)?;
     let exports = mtga_process.get_exports_for_module(&mono_module)?;
     exports

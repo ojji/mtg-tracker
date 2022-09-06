@@ -1,5 +1,6 @@
 use crate::utils;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
+use std::ops::Deref;
 use std::error::Error;
 use std::ffi::c_void;
 
@@ -58,7 +59,7 @@ impl Iterator for Processes {
                 Some(Process {
                     id: process_entry.th32ProcessID,
                     name: utils::get_process_name(&process_entry.szExeFile),
-                    memory_manager: None,
+                    memory_manager: RefCell::new(None),
                 })
             }
         } else {
@@ -75,7 +76,7 @@ impl Iterator for Processes {
                 Some(Process {
                     id: process_entry.th32ProcessID,
                     name: utils::get_process_name(&process_entry.szExeFile),
-                    memory_manager: None,
+                    memory_manager: RefCell::new(None),
                 })
             }
         }
@@ -85,7 +86,7 @@ impl Iterator for Processes {
 pub struct Process {
     id: u32,
     name: String,
-    memory_manager: Option<MemoryManager>,
+    memory_manager: RefCell<Option<MemoryManager>>,
 }
 
 impl Process {
@@ -115,9 +116,11 @@ impl Process {
     }
 
     #[cfg(windows)]
-    pub fn get_memory_manager(&mut self) -> Result<&MemoryManager, Box<dyn Error>> {
+    pub fn get_memory_manager(
+        &self,
+    ) -> Result<impl Deref<Target = MemoryManager> + '_, Box<dyn Error>> {
         use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
-        if self.memory_manager.is_none() {
+        if (*self.memory_manager.borrow()).is_none() {
             let process_handle;
             unsafe {
                 process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, self.id);
@@ -125,22 +128,29 @@ impl Process {
 
             match process_handle {
                 Ok(handle) => {
-                    self.memory_manager = Some(MemoryManager {
+                    *self.memory_manager.borrow_mut() = Some(MemoryManager {
                         process_handle: handle,
                         allocations: RefCell::new(vec![]),
                     });
-                    Ok(self.memory_manager.as_mut().unwrap())
+                    let memory_manager_ref =
+                        Ref::map(self.memory_manager.borrow(), |memory_manager| {
+                            memory_manager.as_ref().unwrap()
+                        });
+                    Ok(memory_manager_ref)
                 }
                 Err(e) => Err(Box::new(e)),
             }
         } else {
-            Ok(self.memory_manager.as_mut().unwrap())
+            let memory_manager_ref = Ref::map(self.memory_manager.borrow(), |memory_manager| {
+                memory_manager.as_ref().unwrap()
+            });
+            Ok(memory_manager_ref)
         }
     }
 
     #[cfg(windows)]
     pub fn get_exports_for_module(
-        &mut self,
+        &self,
         module: &Module,
     ) -> Result<Vec<ExportedFunction>, Box<dyn std::error::Error>> {
         use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
