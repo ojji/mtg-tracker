@@ -1,3 +1,4 @@
+use crate::utils;
 use std::cell::RefCell;
 use std::error::Error;
 use std::ffi::c_void;
@@ -56,7 +57,7 @@ impl Iterator for Processes {
             } else {
                 Some(Process {
                     id: process_entry.th32ProcessID,
-                    name: get_process_name(&process_entry.szExeFile),
+                    name: utils::get_process_name(&process_entry.szExeFile),
                     memory_manager: None,
                 })
             }
@@ -73,17 +74,12 @@ impl Iterator for Processes {
             } else {
                 Some(Process {
                     id: process_entry.th32ProcessID,
-                    name: get_process_name(&process_entry.szExeFile),
+                    name: utils::get_process_name(&process_entry.szExeFile),
                     memory_manager: None,
                 })
             }
         }
     }
-}
-
-fn get_process_name(process_name_raw: &[u16]) -> String {
-    let len = process_name_raw.iter().take_while(|&&c| c != 0).count();
-    String::from_utf16(&process_name_raw[..len]).unwrap()
 }
 
 #[cfg(windows)]
@@ -403,7 +399,7 @@ impl Iterator for Modules {
                 None
             } else {
                 Some(Module {
-                    name: get_module_name(&module_entry.szModule),
+                    name: utils::get_module_name(&module_entry.szModule),
                     load_address: module_entry.modBaseAddr as usize,
                     size: module_entry.modBaseSize as usize,
                 })
@@ -420,18 +416,13 @@ impl Iterator for Modules {
                 None
             } else {
                 Some(Module {
-                    name: get_module_name(&module_entry.szModule),
+                    name: utils::get_module_name(&module_entry.szModule),
                     load_address: module_entry.modBaseAddr as usize,
                     size: module_entry.modBaseSize as usize,
                 })
             }
         }
     }
-}
-
-fn get_module_name(raw_module_name: &[u16]) -> String {
-    let len = raw_module_name.iter().take_while(|&&c| c != 0).count();
-    String::from_utf16(&raw_module_name[..len]).unwrap()
 }
 
 #[derive(Debug)]
