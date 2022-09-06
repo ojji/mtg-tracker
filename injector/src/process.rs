@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::error::Error;
 use std::ffi::c_void;
 
@@ -89,10 +90,12 @@ fn get_process_name(process_name_raw: &[u16]) -> String {
 pub struct MemoryManager {
     process_handle: windows::Win32::Foundation::HANDLE,
     /// Addresses and sizes of the allocations
-    allocations: Vec<(
-        usize, /* allocation_address */
-        usize, /* allocation_size */
-    )>,
+    allocations: RefCell<
+        Vec<(
+            usize, /* allocation_address */
+            usize, /* allocation_size */
+        )>,
+    >,
 }
 
 #[cfg(windows)]
@@ -116,7 +119,7 @@ impl MemoryManager {
         }
     }
 
-    pub fn allocate_and_write(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    pub fn allocate_and_write(&self, data: &[u8]) -> Result<usize, Box<dyn Error>> {
         use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
         use windows::Win32::System::Memory::VirtualAllocEx;
         use windows::Win32::System::Memory::{MEM_COMMIT, PAGE_EXECUTE_READWRITE};
@@ -136,6 +139,7 @@ impl MemoryManager {
             return Err(Box::new(std::io::Error::last_os_error()));
         }
         self.allocations
+            .borrow_mut()
             .push((allocated_address as usize, data.len()));
 
         let mut bytes_written = 0_usize;
@@ -159,7 +163,7 @@ impl MemoryManager {
             bytes_written, allocated_address as usize
         );
 
-        Ok(())
+        Ok(allocated_address as usize)
     }
 }
 
@@ -169,7 +173,7 @@ impl Drop for MemoryManager {
         use windows::Win32::System::Memory::MEM_DECOMMIT;
         use windows::Win32::Foundation::CloseHandle;
 
-        for allocation in &self.allocations {
+        for allocation in &*self.allocations.borrow() {
             let allocation_address = (allocation.0) as *mut c_void;
             let allocation_size = allocation.1;
             let ret;
@@ -231,7 +235,7 @@ impl Process {
     }
 
     #[cfg(windows)]
-    fn get_memory_manager(&mut self) -> Result<&mut MemoryManager, Box<dyn Error>> {
+    pub fn get_memory_manager(&mut self) -> Result<&MemoryManager, Box<dyn Error>> {
         use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
         if self.memory_manager.is_none() {
             let process_handle;
@@ -243,7 +247,7 @@ impl Process {
                 Ok(handle) => {
                     self.memory_manager = Some(MemoryManager {
                         process_handle: handle,
-                        allocations: vec![],
+                        allocations: RefCell::new(vec![]),
                     });
                     Ok(self.memory_manager.as_mut().unwrap())
                 }
@@ -320,7 +324,7 @@ impl Process {
     }
 }
 
-fn read_function_name(memory_manager: &mut MemoryManager, function_name_address: usize) -> String {
+fn read_function_name(memory_manager: &MemoryManager, function_name_address: usize) -> String {
     let mut function_name: Vec<u8> = vec![];
     let mut read_terminator = false;
     let mut offset = 0_usize;
