@@ -161,6 +161,32 @@ impl MemoryManager {
 
         Ok(allocated_address as usize)
     }
+
+    fn read_function_name(&self, function_name_address: usize) -> String {
+        let mut function_name: Vec<u8> = vec![];
+        let mut read_terminator = false;
+        let mut offset = 0_usize;
+        let mut buffer = [0_u8; std::mem::size_of::<usize>()];
+
+        loop {
+            self.read_from_address(function_name_address + offset, &mut buffer);
+
+            function_name.extend(buffer.iter().take_while(|&&c| {
+                if c == 0 {
+                    read_terminator = true;
+                }
+                c != 0
+            }));
+
+            if read_terminator {
+                break;
+            }
+
+            offset += std::mem::size_of::<usize>();
+        }
+
+        String::from_utf8(function_name).unwrap()
+    }
 }
 
 impl Drop for MemoryManager {
@@ -292,10 +318,8 @@ impl Process {
                 let mut function_name_rva: u32 = 0;
                 memory_manager.read_from_address(function_name_addr, &mut function_name_rva);
 
-                let function_name = read_function_name(
-                    memory_manager,
-                    module.load_address + function_name_rva as usize,
-                );
+                let function_name = memory_manager
+                    .read_function_name(module.load_address + function_name_rva as usize);
 
                 let mut function_ordinal = 0_u16;
                 memory_manager
@@ -318,32 +342,6 @@ impl Process {
 
         Ok(exported_functions)
     }
-}
-
-fn read_function_name(memory_manager: &MemoryManager, function_name_address: usize) -> String {
-    let mut function_name: Vec<u8> = vec![];
-    let mut read_terminator = false;
-    let mut offset = 0_usize;
-    let mut buffer = [0_u8; std::mem::size_of::<usize>()];
-
-    loop {
-        memory_manager.read_from_address(function_name_address + offset, &mut buffer);
-
-        function_name.extend(buffer.iter().take_while(|&&c| {
-            if c == 0 {
-                read_terminator = true;
-            }
-            c != 0
-        }));
-
-        if read_terminator {
-            break;
-        }
-
-        offset += std::mem::size_of::<usize>();
-    }
-
-    String::from_utf8(function_name).unwrap()
 }
 
 pub struct Module {
