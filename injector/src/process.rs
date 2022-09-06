@@ -169,9 +169,9 @@ impl MemoryManager {
 
 impl Drop for MemoryManager {
     fn drop(&mut self) {
+        use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::Memory::VirtualFreeEx;
         use windows::Win32::System::Memory::MEM_DECOMMIT;
-        use windows::Win32::Foundation::CloseHandle;
 
         for allocation in &*self.allocations.borrow() {
             let allocation_address = (allocation.0) as *mut c_void;
