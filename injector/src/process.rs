@@ -82,6 +82,205 @@ impl Iterator for Processes {
     }
 }
 
+pub struct Process {
+    id: u32,
+    name: String,
+    memory_manager: Option<MemoryManager>,
+}
+
+impl Process {
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    #[cfg(windows)]
+    pub fn modules(&self) -> Modules {
+        use windows::Win32::System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, TH32CS_SNAPMODULE,
+        };
+
+        let handle;
+        unsafe {
+            handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, self.id());
+        }
+
+        Modules {
+            first: true,
+            snapshot_handle: handle.unwrap(),
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn get_memory_manager(&mut self) -> Result<&MemoryManager, Box<dyn Error>> {
+        use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
+        if self.memory_manager.is_none() {
+            let process_handle;
+            unsafe {
+                process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, self.id);
+            }
+
+            match process_handle {
+                Ok(handle) => {
+                    self.memory_manager = Some(MemoryManager {
+                        process_handle: handle,
+                        allocations: RefCell::new(vec![]),
+                    });
+                    Ok(self.memory_manager.as_mut().unwrap())
+                }
+                Err(e) => Err(Box::new(e)),
+            }
+        } else {
+            Ok(self.memory_manager.as_mut().unwrap())
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn get_exports_for_module(
+        &mut self,
+        module: &Module,
+    ) -> Result<Vec<ExportedFunction>, Box<dyn std::error::Error>> {
+        use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
+        use windows::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY};
+
+        let memory_manager = self.get_memory_manager()?;
+
+        let mut dos_header = IMAGE_DOS_HEADER::default();
+        memory_manager.read_from_address(module.load_address, &mut dos_header);
+
+        let mut nt_headers = IMAGE_NT_HEADERS64::default();
+        let nt_headers_address = module.load_address + dos_header.e_lfanew as usize;
+
+        memory_manager.read_from_address(nt_headers_address, &mut nt_headers);
+
+        let exports_table_address = module.load_address
+            + nt_headers.OptionalHeader.DataDirectory[0].VirtualAddress as usize;
+
+        let mut exports = IMAGE_EXPORT_DIRECTORY::default();
+        memory_manager.read_from_address(exports_table_address, &mut exports);
+
+        let base = exports.Base as u16;
+        let functions_address = module.load_address + exports.AddressOfFunctions as usize;
+        let names_address = module.load_address + exports.AddressOfNames as usize;
+        let names_ordinals_map_address =
+            module.load_address + exports.AddressOfNameOrdinals as usize;
+
+        let exported_functions = (0..exports.NumberOfNames as usize)
+            .into_iter()
+            .map(|i| {
+                let function_name_addr = names_address + i * 4;
+                let function_name_ordinal_map_address = names_ordinals_map_address + i * 2;
+                let mut function_name_rva: u32 = 0;
+                memory_manager.read_from_address(function_name_addr, &mut function_name_rva);
+
+                let function_name = memory_manager
+                    .read_function_name(module.load_address + function_name_rva as usize);
+
+                let mut function_ordinal = 0_u16;
+                memory_manager
+                    .read_from_address(function_name_ordinal_map_address, &mut function_ordinal);
+
+                let mut function_address_rva = 0_u32;
+                memory_manager.read_from_address(
+                    functions_address + function_ordinal as usize * 4,
+                    &mut function_address_rva,
+                );
+                let function_address = module.load_address + function_address_rva as usize;
+
+                ExportedFunction {
+                    ordinal: (function_ordinal + base) as u32,
+                    name: function_name,
+                    address: function_address,
+                }
+            })
+            .collect::<Vec<ExportedFunction>>();
+
+        Ok(exported_functions)
+    }
+}
+
+#[cfg(windows)]
+pub struct Modules {
+    first: bool,
+    snapshot_handle: windows::Win32::Foundation::HANDLE,
+}
+
+#[cfg(windows)]
+impl Iterator for Modules {
+    type Item = Module;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        use windows::Win32::System::Diagnostics::ToolHelp::{
+            Module32FirstW, Module32NextW, MODULEENTRY32W,
+        };
+
+        let mut module_entry = MODULEENTRY32W {
+            dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
+            ..Default::default()
+        };
+
+        if self.first {
+            self.first = false;
+            let ret;
+            unsafe {
+                ret = Module32FirstW(
+                    self.snapshot_handle,
+                    &mut module_entry as *mut MODULEENTRY32W,
+                );
+            }
+            if !ret.as_bool() {
+                None
+            } else {
+                Some(Module {
+                    name: utils::get_module_name(&module_entry.szModule),
+                    load_address: module_entry.modBaseAddr as usize,
+                    size: module_entry.modBaseSize as usize,
+                })
+            }
+        } else {
+            let ret;
+            unsafe {
+                ret = Module32NextW(
+                    self.snapshot_handle,
+                    &mut module_entry as *mut MODULEENTRY32W,
+                );
+            }
+            if !ret.as_bool() {
+                None
+            } else {
+                Some(Module {
+                    name: utils::get_module_name(&module_entry.szModule),
+                    load_address: module_entry.modBaseAddr as usize,
+                    size: module_entry.modBaseSize as usize,
+                })
+            }
+        }
+    }
+}
+
+pub struct Module {
+    name: String,
+    load_address: usize,
+    size: usize,
+}
+
+impl Module {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn load_address(&self) -> usize {
+        self.load_address
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
+}
+
 #[cfg(windows)]
 pub struct MemoryManager {
     process_handle: windows::Win32::Foundation::HANDLE,
@@ -220,205 +419,6 @@ impl Drop for MemoryManager {
 
         if !ret.as_bool() {
             panic!("Couldnt close the process handle");
-        }
-    }
-}
-
-pub struct Process {
-    id: u32,
-    name: String,
-    memory_manager: Option<MemoryManager>,
-}
-
-impl Process {
-    pub fn id(&self) -> u32 {
-        self.id
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    #[cfg(windows)]
-    pub fn modules(&self) -> Modules {
-        use windows::Win32::System::Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, TH32CS_SNAPMODULE,
-        };
-
-        let handle;
-        unsafe {
-            handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, self.id());
-        }
-
-        Modules {
-            first: true,
-            snapshot_handle: handle.unwrap(),
-        }
-    }
-
-    #[cfg(windows)]
-    pub fn get_memory_manager(&mut self) -> Result<&MemoryManager, Box<dyn Error>> {
-        use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
-        if self.memory_manager.is_none() {
-            let process_handle;
-            unsafe {
-                process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, self.id);
-            }
-
-            match process_handle {
-                Ok(handle) => {
-                    self.memory_manager = Some(MemoryManager {
-                        process_handle: handle,
-                        allocations: RefCell::new(vec![]),
-                    });
-                    Ok(self.memory_manager.as_mut().unwrap())
-                }
-                Err(e) => Err(Box::new(e)),
-            }
-        } else {
-            Ok(self.memory_manager.as_mut().unwrap())
-        }
-    }
-
-    #[cfg(windows)]
-    pub fn get_exports_for_module(
-        &mut self,
-        module: &Module,
-    ) -> Result<Vec<ExportedFunction>, Box<dyn std::error::Error>> {
-        use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
-        use windows::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY};
-
-        let memory_manager = self.get_memory_manager()?;
-
-        let mut dos_header = IMAGE_DOS_HEADER::default();
-        memory_manager.read_from_address(module.load_address, &mut dos_header);
-
-        let mut nt_headers = IMAGE_NT_HEADERS64::default();
-        let nt_headers_address = module.load_address + dos_header.e_lfanew as usize;
-
-        memory_manager.read_from_address(nt_headers_address, &mut nt_headers);
-
-        let exports_table_address = module.load_address
-            + nt_headers.OptionalHeader.DataDirectory[0].VirtualAddress as usize;
-
-        let mut exports = IMAGE_EXPORT_DIRECTORY::default();
-        memory_manager.read_from_address(exports_table_address, &mut exports);
-
-        let base = exports.Base as u16;
-        let functions_address = module.load_address + exports.AddressOfFunctions as usize;
-        let names_address = module.load_address + exports.AddressOfNames as usize;
-        let names_ordinals_map_address =
-            module.load_address + exports.AddressOfNameOrdinals as usize;
-
-        let exported_functions = (0..exports.NumberOfNames as usize)
-            .into_iter()
-            .map(|i| {
-                let function_name_addr = names_address + i * 4;
-                let function_name_ordinal_map_address = names_ordinals_map_address + i * 2;
-                let mut function_name_rva: u32 = 0;
-                memory_manager.read_from_address(function_name_addr, &mut function_name_rva);
-
-                let function_name = memory_manager
-                    .read_function_name(module.load_address + function_name_rva as usize);
-
-                let mut function_ordinal = 0_u16;
-                memory_manager
-                    .read_from_address(function_name_ordinal_map_address, &mut function_ordinal);
-
-                let mut function_address_rva = 0_u32;
-                memory_manager.read_from_address(
-                    functions_address + function_ordinal as usize * 4,
-                    &mut function_address_rva,
-                );
-                let function_address = module.load_address + function_address_rva as usize;
-
-                ExportedFunction {
-                    ordinal: (function_ordinal + base) as u32,
-                    name: function_name,
-                    address: function_address,
-                }
-            })
-            .collect::<Vec<ExportedFunction>>();
-
-        Ok(exported_functions)
-    }
-}
-
-pub struct Module {
-    name: String,
-    load_address: usize,
-    size: usize,
-}
-
-impl Module {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn load_address(&self) -> usize {
-        self.load_address
-    }
-
-    pub fn size(&self) -> usize {
-        self.size
-    }
-}
-
-#[cfg(windows)]
-pub struct Modules {
-    first: bool,
-    snapshot_handle: windows::Win32::Foundation::HANDLE,
-}
-
-#[cfg(windows)]
-impl Iterator for Modules {
-    type Item = Module;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        use windows::Win32::System::Diagnostics::ToolHelp::{
-            Module32FirstW, Module32NextW, MODULEENTRY32W,
-        };
-
-        let mut module_entry = MODULEENTRY32W {
-            dwSize: std::mem::size_of::<MODULEENTRY32W>() as u32,
-            ..Default::default()
-        };
-
-        if self.first {
-            self.first = false;
-            let ret;
-            unsafe {
-                ret = Module32FirstW(
-                    self.snapshot_handle,
-                    &mut module_entry as *mut MODULEENTRY32W,
-                );
-            }
-            if !ret.as_bool() {
-                None
-            } else {
-                Some(Module {
-                    name: utils::get_module_name(&module_entry.szModule),
-                    load_address: module_entry.modBaseAddr as usize,
-                    size: module_entry.modBaseSize as usize,
-                })
-            }
-        } else {
-            let ret;
-            unsafe {
-                ret = Module32NextW(
-                    self.snapshot_handle,
-                    &mut module_entry as *mut MODULEENTRY32W,
-                );
-            }
-            if !ret.as_bool() {
-                None
-            } else {
-                Some(Module {
-                    name: utils::get_module_name(&module_entry.szModule),
-                    load_address: module_entry.modBaseAddr as usize,
-                    size: module_entry.modBaseSize as usize,
-                })
-            }
         }
     }
 }
