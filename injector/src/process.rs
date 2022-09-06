@@ -254,6 +254,96 @@ impl Process {
         }
     }
 
+    #[cfg(windows)]
+    pub fn get_exports_for_module(
+        &mut self,
+        module: &Module,
+    ) -> Result<Vec<ExportedFunction>, Box<dyn std::error::Error>> {
+        use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
+        use windows::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY};
+
+        let memory_manager = self.get_memory_manager()?;
+
+        let mut dos_header = IMAGE_DOS_HEADER::default();
+        memory_manager.read_from_address(module.load_address, &mut dos_header);
+
+        let mut nt_headers = IMAGE_NT_HEADERS64::default();
+        let nt_headers_address = module.load_address + dos_header.e_lfanew as usize;
+
+        memory_manager.read_from_address(nt_headers_address, &mut nt_headers);
+
+        let exports_table_address = module.load_address
+            + nt_headers.OptionalHeader.DataDirectory[0].VirtualAddress as usize;
+
+        let mut exports = IMAGE_EXPORT_DIRECTORY::default();
+        memory_manager.read_from_address(exports_table_address, &mut exports);
+
+        let base = exports.Base as u16;
+        let functions_address = module.load_address + exports.AddressOfFunctions as usize;
+        let names_address = module.load_address + exports.AddressOfNames as usize;
+        let names_ordinals_map_address =
+            module.load_address + exports.AddressOfNameOrdinals as usize;
+
+        let exported_functions = (0..exports.NumberOfNames as usize)
+            .into_iter()
+            .map(|i| {
+                let function_name_addr = names_address + i * 4;
+                let function_name_ordinal_map_address = names_ordinals_map_address + i * 2;
+                let mut function_name_rva: u32 = 0;
+                memory_manager.read_from_address(function_name_addr, &mut function_name_rva);
+
+                let function_name = read_function_name(
+                    memory_manager,
+                    module.load_address + function_name_rva as usize,
+                );
+
+                let mut function_ordinal = 0_u16;
+                memory_manager
+                    .read_from_address(function_name_ordinal_map_address, &mut function_ordinal);
+
+                let mut function_address_rva = 0_u32;
+                memory_manager.read_from_address(
+                    functions_address + function_ordinal as usize * 4,
+                    &mut function_address_rva,
+                );
+                let function_address = module.load_address + function_address_rva as usize;
+
+                ExportedFunction {
+                    ordinal: (function_ordinal + base) as u32,
+                    name: function_name,
+                    address: function_address,
+                }
+            })
+            .collect::<Vec<ExportedFunction>>();
+
+        Ok(exported_functions)
+    }
+}
+
+fn read_function_name(memory_manager: &mut MemoryManager, function_name_address: usize) -> String {
+    let mut function_name: Vec<u8> = vec![];
+    let mut read_terminator = false;
+    let mut offset = 0_usize;
+    let mut buffer = [0_u8; std::mem::size_of::<usize>()];
+
+    loop {
+        memory_manager.read_from_address(function_name_address + offset, &mut buffer);
+
+        function_name.extend(buffer.iter().take_while(|&&c| {
+            if c == 0 {
+                read_terminator = true;
+            }
+            c != 0
+        }));
+
+        if read_terminator {
+            break;
+        }
+
+        offset += std::mem::size_of::<usize>();
+    }
+
+    String::from_utf8(function_name).unwrap()
 }
 
 pub struct Module {
@@ -338,4 +428,31 @@ impl Iterator for Modules {
 fn get_module_name(raw_module_name: &[u16]) -> String {
     let len = raw_module_name.iter().take_while(|&&c| c != 0).count();
     String::from_utf16(&raw_module_name[..len]).unwrap()
+}
+
+#[derive(Debug)]
+pub struct ExportedFunction {
+    ordinal: u32,
+    name: String,
+    address: usize,
+}
+
+impl ExportedFunction {
+    pub fn ordinal(&self) -> u32 {
+        self.ordinal
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    pub fn address(&self) -> usize {
+        self.address
+    }
+}
+
+impl std::fmt::Display for ExportedFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {} ({:#02X})", self.ordinal, self.name, self.address)
+    }
 }
