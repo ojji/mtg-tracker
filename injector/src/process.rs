@@ -1,8 +1,9 @@
 use crate::utils;
 use std::cell::{Ref, RefCell};
-use std::ops::Deref;
 use std::error::Error;
 use std::ffi::c_void;
+use std::ops::Deref;
+use std::rc::Rc;
 
 #[cfg(windows)]
 extern crate windows;
@@ -59,6 +60,7 @@ impl Iterator for Processes {
                 Some(Process {
                     id: process_entry.th32ProcessID,
                     name: utils::get_process_name(&process_entry.szExeFile),
+                    process_handle: RefCell::new(None),
                     memory_manager: RefCell::new(None),
                 })
             }
@@ -76,6 +78,7 @@ impl Iterator for Processes {
                 Some(Process {
                     id: process_entry.th32ProcessID,
                     name: utils::get_process_name(&process_entry.szExeFile),
+                    process_handle: RefCell::new(None),
                     memory_manager: RefCell::new(None),
                 })
             }
@@ -86,6 +89,7 @@ impl Iterator for Processes {
 pub struct Process {
     id: u32,
     name: String,
+    process_handle: RefCell<Option<Rc<HandleWrapper>>>,
     memory_manager: RefCell<Option<MemoryManager>>,
 }
 
@@ -115,37 +119,44 @@ impl Process {
         }
     }
 
+    /// Returns a handle to the process with `PROCESS_ALL_ACCESS` rights.
+    ///
+    /// This method uses a lazy pattern so if you never call the `get_process_handle()` function,
+    /// `Process` will not have an open process handle.
+    #[cfg(windows)]
+    fn get_process_handle(&self) -> Result<Rc<HandleWrapper>, Box<dyn Error>> {
+        use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
+        let handle;
+        unsafe {
+            handle = OpenProcess(PROCESS_ALL_ACCESS, false, self.id)?;
+        }
+
+        if self.process_handle.borrow().is_none() {
+            *self.process_handle.borrow_mut() = Some(Rc::new(HandleWrapper { handle }));
+        }
+
+        Ok(Rc::clone(&Ref::map(
+            self.process_handle.borrow(),
+            |process_handle| process_handle.as_ref().unwrap(),
+        )))
+    }
+
+    /// Returns a memory manager to the process, used to read and write into the process memory.
+    ///
+    /// Since `MemoryManager` needs a handle to the process, the function will call `get_process_handle()`,
+    /// opening a process handle to the process.
     #[cfg(windows)]
     pub fn get_memory_manager(
         &self,
     ) -> Result<impl Deref<Target = MemoryManager> + '_, Box<dyn Error>> {
-        use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
         if (*self.memory_manager.borrow()).is_none() {
-            let process_handle;
-            unsafe {
-                process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, self.id);
-            }
-
-            match process_handle {
-                Ok(handle) => {
-                    *self.memory_manager.borrow_mut() = Some(MemoryManager {
-                        process_handle: handle,
-                        allocations: RefCell::new(vec![]),
-                    });
-                    let memory_manager_ref =
-                        Ref::map(self.memory_manager.borrow(), |memory_manager| {
-                            memory_manager.as_ref().unwrap()
-                        });
-                    Ok(memory_manager_ref)
-                }
-                Err(e) => Err(Box::new(e)),
-            }
-        } else {
-            let memory_manager_ref = Ref::map(self.memory_manager.borrow(), |memory_manager| {
-                memory_manager.as_ref().unwrap()
-            });
-            Ok(memory_manager_ref)
+            let memory_manager = MemoryManager::new(self.get_process_handle()?);
+            *self.memory_manager.borrow_mut() = Some(memory_manager);
         }
+
+        Ok(Ref::map(self.memory_manager.borrow(), |memory_manager| {
+            memory_manager.as_ref().unwrap()
+        }))
     }
 
     #[cfg(windows)]
@@ -293,7 +304,7 @@ impl Module {
 
 #[cfg(windows)]
 pub struct MemoryManager {
-    process_handle: windows::Win32::Foundation::HANDLE,
+    process_handle: Rc<HandleWrapper>,
     /// Addresses and sizes of the allocations
     allocations: RefCell<
         Vec<(
@@ -305,13 +316,22 @@ pub struct MemoryManager {
 
 #[cfg(windows)]
 impl MemoryManager {
+    fn new(process_handle: Rc<HandleWrapper>) -> MemoryManager {
+        MemoryManager {
+            process_handle,
+            allocations: RefCell::new(vec![]),
+        }
+    }
+
     pub fn read_from_address<T>(&self, address: usize, buffer: &mut T) {
         use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 
         let mut bytes_read = 0_usize;
+        assert!(!self.process_handle.handle.is_invalid());
+
         unsafe {
             let ret = ReadProcessMemory(
-                self.process_handle,
+                self.process_handle.handle,
                 address as *const c_void,
                 buffer as *mut T as *mut c_void,
                 std::mem::size_of::<T>(),
@@ -329,10 +349,12 @@ impl MemoryManager {
         use windows::Win32::System::Memory::VirtualAllocEx;
         use windows::Win32::System::Memory::{MEM_COMMIT, PAGE_EXECUTE_READWRITE};
 
+        assert!(!self.process_handle.handle.is_invalid());
+
         let allocated_address;
         unsafe {
             allocated_address = VirtualAllocEx(
-                self.process_handle,
+                self.process_handle.handle,
                 std::ptr::null_mut(),
                 data.len(),
                 MEM_COMMIT,
@@ -351,7 +373,7 @@ impl MemoryManager {
         let ret;
         unsafe {
             ret = WriteProcessMemory(
-                self.process_handle,
+                self.process_handle.handle,
                 allocated_address,
                 data.as_ptr() as *const c_void,
                 data.len(),
@@ -400,17 +422,17 @@ impl MemoryManager {
 
 impl Drop for MemoryManager {
     fn drop(&mut self) {
-        use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::Memory::VirtualFreeEx;
         use windows::Win32::System::Memory::MEM_DECOMMIT;
 
         for allocation in &*self.allocations.borrow() {
+            assert!(!self.process_handle.handle.is_invalid());
             let allocation_address = (allocation.0) as *mut c_void;
             let allocation_size = allocation.1;
             let ret;
             unsafe {
                 ret = VirtualFreeEx(
-                    self.process_handle,
+                    self.process_handle.handle,
                     allocation_address,
                     allocation_size,
                     MEM_DECOMMIT,
@@ -420,15 +442,6 @@ impl Drop for MemoryManager {
                 panic!("Uh oh something went wrong and we are leaking");
             }
             println!("Dropped {} allocated bytes", allocation_size);
-        }
-
-        let ret;
-        unsafe {
-            ret = CloseHandle(self.process_handle);
-        }
-
-        if !ret.as_bool() {
-            panic!("Couldnt close the process handle");
         }
     }
 }
@@ -457,5 +470,44 @@ impl ExportedFunction {
 impl std::fmt::Display for ExportedFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {} ({:#02X})", self.ordinal, self.name, self.address)
+    }
+}
+
+#[cfg(windows)]
+struct HandleWrapper {
+    handle: windows::Win32::Foundation::HANDLE,
+}
+
+impl From<windows::Win32::Foundation::HANDLE> for HandleWrapper {
+    fn from(handle: windows::Win32::Foundation::HANDLE) -> Self {
+        HandleWrapper { handle }
+    }
+}
+
+impl From<HandleWrapper> for windows::Win32::Foundation::HANDLE {
+    fn from(wrapper: HandleWrapper) -> Self {
+        wrapper.handle
+    }
+}
+
+impl Deref for HandleWrapper {
+    type Target = windows::Win32::Foundation::HANDLE;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
+impl Drop for HandleWrapper {
+    fn drop(&mut self) {
+        println!("Dropping handle");
+        use windows::Win32::Foundation::CloseHandle;
+        let ret;
+        unsafe {
+            ret = CloseHandle(self.handle);
+        }
+        if !ret.as_bool() {
+            panic!("Error during process handle close.");
+        }
     }
 }
