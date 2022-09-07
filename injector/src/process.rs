@@ -221,6 +221,37 @@ impl Process {
 
         Ok(exported_functions)
     }
+
+    pub fn execute(&self, start_address: usize) -> Result<(), Box<dyn std::error::Error>> {
+        use windows::Win32::Foundation::{WAIT_OBJECT_0, WIN32_ERROR};
+        use windows::Win32::System::Threading::CreateRemoteThread;
+        use windows::Win32::System::Threading::WaitForSingleObject;
+        use windows::Win32::System::WindowsProgramming::INFINITE;
+
+        unsafe {
+            let start_address =
+                std::mem::transmute::<usize, extern "system" fn(*mut c_void) -> u32>(start_address);
+
+                let mut thread_id = 0_u32;
+            let thread_handle: HandleWrapper = CreateRemoteThread(
+                self.get_process_handle()?.handle,
+                std::ptr::null(),
+                0,
+                Some(start_address),
+                std::ptr::null(),
+                0,
+                &mut thread_id as *mut u32,
+            )?
+            .into();
+
+            let result = WaitForSingleObject(*thread_handle, INFINITE);
+            if WIN32_ERROR(result) != WAIT_OBJECT_0 {
+                Err("Waiting on the created thread failed".into())
+            } else {
+                Ok(())
+            }
+        }
+    }
 }
 
 #[cfg(windows)]
