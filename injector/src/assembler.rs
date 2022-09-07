@@ -17,7 +17,7 @@ impl Assembler {
     /// Substracts a value from the stack pointer register.
     ///
     /// The asssembly code emitted in binary is: ```sub rsp, value```
-    pub fn sub_rsp(&mut self, value: usize) {
+    pub fn sub_rsp(&mut self, value: u8) {
         self.data.extend_from_slice(&[0x48, 0x83, 0xEC]);
         self.data.extend_from_slice(&value.to_le_bytes());
     }
@@ -25,7 +25,7 @@ impl Assembler {
     /// Adds a value to the stack pointer register.
     ///
     /// The asssembly code emitted in binary is: ```add rsp, value```
-    pub fn add_rsp(&mut self, value: usize) {
+    pub fn add_rsp(&mut self, value: u8) {
         self.data.extend_from_slice(&[0x48, 0x83, 0xC4]);
         self.data.extend_from_slice(&value.to_le_bytes());
     }
@@ -33,7 +33,7 @@ impl Assembler {
     /// Moves a value to the rax register.
     ///
     /// The asssembly code emitted in binary is: ```mov rax, value```
-    pub fn mov_rax(&mut self, value: usize) {
+    pub fn mov_rax(&mut self, value: u64) {
         self.data.extend_from_slice(&[0x48, 0xB8]);
         self.data.extend_from_slice(&value.to_le_bytes());
     }
@@ -41,7 +41,7 @@ impl Assembler {
     /// Moves a value to the rcx register.
     ///
     /// The asssembly code emitted in binary is: ```mov rcx, value```
-    pub fn mov_rcx(&mut self, value: usize) {
+    pub fn mov_rcx(&mut self, value: u64) {
         self.data.extend_from_slice(&[0x48, 0xB9]);
         self.data.extend_from_slice(&value.to_le_bytes());
     }
@@ -49,7 +49,7 @@ impl Assembler {
     /// Moves a value to the rdx register.
     ///
     /// The asssembly code emitted in binary is: ```mov rdx, value```
-    pub fn mov_rdx(&mut self, value: usize) {
+    pub fn mov_rdx(&mut self, value: u64) {
         self.data.extend_from_slice(&[0x48, 0xBA]);
         self.data.extend_from_slice(&value.to_le_bytes());
     }
@@ -57,7 +57,7 @@ impl Assembler {
     /// Moves a value to the r8 register.
     ///
     /// The asssembly code emitted in binary is: ```mov r8, value```
-    pub fn mov_r8(&mut self, value: usize) {
+    pub fn mov_r8(&mut self, value: u64) {
         self.data.extend_from_slice(&[0x49, 0xB8]);
         self.data.extend_from_slice(&value.to_le_bytes());
     }
@@ -65,7 +65,7 @@ impl Assembler {
     /// Moves a value to the r9 register.
     ///
     /// The asssembly code emitted in binary is: ```mov r9, value```
-    pub fn mov_r9(&mut self, value: usize) {
+    pub fn mov_r9(&mut self, value: u64) {
         self.data.extend_from_slice(&[0x49, 0xB9]);
         self.data.extend_from_slice(&value.to_le_bytes());
     }
