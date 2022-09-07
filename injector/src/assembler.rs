@@ -1,3 +1,5 @@
+use std::fmt::write;
+
 /// Implementation of the Assembler was made possible by
 /// [this amazing Online x86 / x64 Assembler and Disassembler](https://defuse.ca/online-x86-assembler.htm)
 ///
@@ -96,6 +98,16 @@ impl Assembler {
     pub fn data(&self) -> &[u8] {
         &self.data
     }
+}
 
+impl std::fmt::Display for Assembler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut str = String::new();
 
+        for c in &self.data {
+            str.push_str(format!("{:02x} ", c).as_str());
+        }
+
+        write!(f, "{}", str)
+    }
 }
