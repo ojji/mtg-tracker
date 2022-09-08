@@ -159,6 +159,9 @@ impl Process {
         }))
     }
 
+    /// Returns the exported functions for a module in the process
+    ///
+    /// Since it uses `MemoryManager`, the function has to get a process handle with PROCESS_ALL_ACCESS rights.
     #[cfg(windows)]
     pub fn get_exports_for_module(
         &self,
