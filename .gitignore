@@ -7,3 +7,7 @@
 *.vsix
 
 /target
+
+bin/
+obj/
+.vs/
