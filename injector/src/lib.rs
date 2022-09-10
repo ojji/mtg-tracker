@@ -9,37 +9,31 @@ use std::{collections::HashMap, convert::TryInto, error::Error, fs, path::Path};
 pub struct Mtga {
     process: Process,
     mono_functions: HashMap<RequiredFunction, process::ExportedFunction>,
-    collector_data: Vec<u8>,
 }
 
 impl Mtga {
-    pub fn new<P>(collector_path: P) -> Result<Mtga, Box<dyn Error>>
+    pub fn new() -> Result<Mtga, Box<dyn Error>> {
+        let process = processes()
+            .find(|process| process.name() == "MTGA.exe")
+            .ok_or("Could not find MTGA.exe")?;
+
+        let mono_module = Mtga::find_mono_module(&process)?;
+
+        let mono_functions = Mtga::find_required_mono_functions(&process, &mono_module)?;
+
+        Ok(Mtga {
+            process,
+            mono_functions,
+        })
+    }
+
+    pub fn inject_tracker<P>(&self, collector_path: P) -> Result<(), Box<dyn Error>>
     where
         P: AsRef<Path>,
     {
-        fn inner(collector_path: &Path) -> Result<Mtga, Box<dyn Error>> {
-            let collector_data = fs::read(collector_path)?;
-            let process = processes()
-                .find(|process| process.name() == "MTGA.exe")
-                .ok_or("Could not find MTGA.exe")?;
-
-            let mono_module = Mtga::find_mono_module(&process)?;
-
-            let mono_functions = Mtga::find_required_mono_functions(&process, &mono_module)?;
-
-            Ok(Mtga {
-                process,
-                mono_functions,
-                collector_data,
-            })
-        }
-        inner(collector_path.as_ref())
-    }
-
-    pub fn inject_tracker(&self) -> Result<(), Box<dyn Error>> {
+        let collector_data = fs::read(collector_path)?;
         let root_domain_ptr = self.get_root_domain()?;
-        let load_image_ptr =
-            self.create_mono_image_from_data(&self.collector_data, root_domain_ptr)?;
+        let load_image_ptr = self.create_mono_image_from_data(&collector_data, root_domain_ptr)?;
 
         let datacollector_assembly_ptr =
             self.create_mono_assembly_from_image(root_domain_ptr, load_image_ptr)?;
