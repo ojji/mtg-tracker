@@ -9,7 +9,7 @@ use std::rc::Rc;
 extern crate windows;
 
 #[cfg(windows)]
-pub fn processes() -> Processes {
+pub(crate) fn processes() -> Processes {
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, TH32CS_SNAPPROCESS,
     };
@@ -26,7 +26,7 @@ pub fn processes() -> Processes {
 }
 
 #[cfg(windows)]
-pub struct Processes {
+pub(crate) struct Processes {
     first: bool,
     snapshot_handle: windows::Win32::Foundation::HANDLE,
 }
@@ -86,7 +86,7 @@ impl Iterator for Processes {
     }
 }
 
-pub struct Process {
+pub(crate) struct Process {
     id: u32,
     name: String,
     process_handle: RefCell<Option<Rc<HandleWrapper>>>,
@@ -94,16 +94,16 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn id(&self) -> u32 {
+    pub(crate) fn id(&self) -> u32 {
         self.id
     }
 
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.name
     }
 
     #[cfg(windows)]
-    pub fn modules(&self) -> Modules {
+    pub(crate) fn modules(&self) -> Modules {
         use windows::Win32::System::Diagnostics::ToolHelp::{
             CreateToolhelp32Snapshot, TH32CS_SNAPMODULE,
         };
@@ -146,7 +146,7 @@ impl Process {
     /// Since `MemoryManager` needs a handle to the process, the function will call `get_process_handle()`,
     /// opening a process handle to the process.
     #[cfg(windows)]
-    pub fn get_memory_manager(
+    pub(crate) fn get_memory_manager(
         &self,
     ) -> Result<impl Deref<Target = MemoryManager> + '_, Box<dyn Error>> {
         if (*self.memory_manager.borrow()).is_none() {
@@ -163,7 +163,7 @@ impl Process {
     ///
     /// Since it uses `MemoryManager`, the function has to get a process handle with PROCESS_ALL_ACCESS rights.
     #[cfg(windows)]
-    pub fn get_exports_for_module(
+    pub(crate) fn get_exports_for_module(
         &self,
         module: &Module,
     ) -> Result<Vec<ExportedFunction>, Box<dyn std::error::Error>> {
@@ -225,7 +225,7 @@ impl Process {
         exported_functions
     }
 
-    pub fn execute(&self, start_address: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn execute(&self, start_address: usize) -> Result<(), Box<dyn std::error::Error>> {
         use windows::Win32::Foundation::{WAIT_OBJECT_0, WIN32_ERROR};
         use windows::Win32::System::Threading::CreateRemoteThread;
         use windows::Win32::System::Threading::WaitForSingleObject;
@@ -258,7 +258,7 @@ impl Process {
 }
 
 #[cfg(windows)]
-pub struct Modules {
+pub(crate) struct Modules {
     first: bool,
     snapshot_handle: windows::Win32::Foundation::HANDLE,
 }
@@ -292,7 +292,6 @@ impl Iterator for Modules {
                 Some(Module {
                     name: utils::get_module_name(&module_entry.szModule),
                     load_address: module_entry.modBaseAddr as usize,
-                    size: module_entry.modBaseSize as usize,
                 })
             }
         } else {
@@ -309,35 +308,25 @@ impl Iterator for Modules {
                 Some(Module {
                     name: utils::get_module_name(&module_entry.szModule),
                     load_address: module_entry.modBaseAddr as usize,
-                    size: module_entry.modBaseSize as usize,
                 })
             }
         }
     }
 }
 
-pub struct Module {
+pub(crate) struct Module {
     name: String,
     load_address: usize,
-    size: usize,
 }
 
 impl Module {
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.name
-    }
-
-    pub fn load_address(&self) -> usize {
-        self.load_address
-    }
-
-    pub fn size(&self) -> usize {
-        self.size
     }
 }
 
 #[cfg(windows)]
-pub struct MemoryManager {
+pub(crate) struct MemoryManager {
     process_handle: Rc<HandleWrapper>,
     /// Addresses and sizes of the allocations
     allocations: RefCell<
@@ -350,14 +339,14 @@ pub struct MemoryManager {
 
 #[cfg(windows)]
 impl MemoryManager {
-    fn new(process_handle: Rc<HandleWrapper>) -> MemoryManager {
+    pub(crate) fn new(process_handle: Rc<HandleWrapper>) -> MemoryManager {
         MemoryManager {
             process_handle,
             allocations: RefCell::new(vec![]),
         }
     }
 
-    pub fn read_from_address<T>(
+    pub(crate) fn read_from_address<T>(
         &self,
         address: usize,
         buffer: &mut T,
@@ -384,7 +373,7 @@ impl MemoryManager {
         }
     }
 
-    pub fn allocate_and_write(&self, data: &[u8]) -> Result<usize, Box<dyn Error>> {
+    pub(crate) fn allocate_and_write(&self, data: &[u8]) -> Result<usize, Box<dyn Error>> {
         use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
         use windows::Win32::System::Memory::VirtualAllocEx;
         use windows::Win32::System::Memory::{MEM_COMMIT, PAGE_EXECUTE_READWRITE};
@@ -428,7 +417,10 @@ impl MemoryManager {
         Ok(allocated_address as usize)
     }
 
-    pub fn read_string_from_char_ptr(&self, address: usize) -> Result<String, Box<dyn Error>> {
+    pub(crate) fn read_string_from_char_ptr(
+        &self,
+        address: usize,
+    ) -> Result<String, Box<dyn Error>> {
         let mut s: Vec<u8> = vec![];
         let mut read_terminator = false;
         let mut offset = 0_usize;
@@ -482,22 +474,18 @@ impl Drop for MemoryManager {
 }
 
 #[derive(Debug)]
-pub struct ExportedFunction {
+pub(crate) struct ExportedFunction {
     ordinal: u32,
     name: String,
     address: usize,
 }
 
 impl ExportedFunction {
-    pub fn ordinal(&self) -> u32 {
-        self.ordinal
+    pub(crate) fn name(&self) -> &str {
+        &self.name
     }
 
-    pub fn name(&self) -> &str {
-        self.name.as_ref()
-    }
-
-    pub fn address(&self) -> usize {
+    pub(crate) fn address(&self) -> usize {
         self.address
     }
 }
@@ -509,7 +497,7 @@ impl std::fmt::Display for ExportedFunction {
 }
 
 #[cfg(windows)]
-struct HandleWrapper {
+pub(crate) struct HandleWrapper {
     handle: windows::Win32::Foundation::HANDLE,
 }
 
