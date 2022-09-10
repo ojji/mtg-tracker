@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <RootNamespace>mtga_datacollector</RootNamespace>
+    <Nullable>enable</Nullable>
+    <PreserveCompilationContext>false</PreserveCompilationContext>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
+    <Reference Include="Assembly.CSharp">
+      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
+  </ItemGroup>
+
+</Project>
