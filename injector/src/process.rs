@@ -425,11 +425,6 @@ impl MemoryManager {
             return Err(Box::new(std::io::Error::last_os_error()));
         }
 
-        println!(
-            "{} bytes successfully written to the address {:#x}",
-            bytes_written, allocated_address as usize
-        );
-
         Ok(allocated_address as usize)
     }
 
@@ -482,7 +477,6 @@ impl Drop for MemoryManager {
             if !ret.as_bool() {
                 panic!("Uh oh something went wrong and we are leaking");
             }
-            println!("Dropped {} allocated bytes", allocation_size);
         }
     }
 }
@@ -541,7 +535,6 @@ impl Deref for HandleWrapper {
 
 impl Drop for HandleWrapper {
     fn drop(&mut self) {
-        println!("Dropping handle");
         use windows::Win32::Foundation::CloseHandle;
         let ret;
         unsafe {
