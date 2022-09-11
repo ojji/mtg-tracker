@@ -5,6 +5,7 @@ use std::{
 
 pub struct Config {
     command: TrackerCommand,
+    database_path: PathBuf,
 }
 
 impl Config {
@@ -12,9 +13,11 @@ impl Config {
         let default_collector_path = Path::new(
             r"./mtga-datacollector/bin/x64/Release/netstandard2.1/mtga-datacollector.dll",
         );
+        let default_database_path = Path::new(r"./mtga-tracker.db");
         if args.len() == 1 {
             Ok(Config {
                 command: TrackerCommand::Inject(default_collector_path.to_path_buf()),
+                database_path: default_database_path.to_path_buf(),
             })
         } else {
             let args: Vec<String> = args.into_iter().collect();
@@ -24,6 +27,7 @@ impl Config {
                         args.get(2).map_or(default_collector_path, |p| Path::new(p));
                     Ok(Config {
                         command: TrackerCommand::Inject(collector_path.to_path_buf()),
+                        database_path: default_database_path.to_path_buf(),
                     })
                 }
                 "createdb" => {
@@ -37,6 +41,7 @@ impl Config {
                             database_path.to_path_buf(),
                             required_sets,
                         ),
+                        database_path: default_database_path.to_path_buf(),
                     })
                 }
                 _ => return Err("Unrecognized command".into()),
@@ -46,6 +51,10 @@ impl Config {
 
     pub fn command(&self) -> &TrackerCommand {
         &self.command
+    }
+
+    pub fn database_path(&self) -> &PathBuf {
+        &self.database_path
     }
 }
 
