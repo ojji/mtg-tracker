@@ -1,4 +1,5 @@
-use tracker::Tracker;
+use tracker::tracker::Tracker;
+
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args();

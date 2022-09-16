@@ -1,10 +1,10 @@
 ﻿using System;
-using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 using Wizards.Mtga.FrontDoorModels;
 using Newtonsoft.Json;
 using System.Threading;
+using System.Linq;
 
 namespace mtga_datacollector
 {
@@ -14,12 +14,18 @@ namespace mtga_datacollector
     public object Attachment;
   }
 
+  public class CardInventoryEntry
+  {
+    public uint grpId;
+    public int count;
+    public bool isRebalanced;
+    public uint rebalancedCardLink;
+  }
   public class MtgaDataCollector : MonoBehaviour
   {
     private UnityCrossThreadLogger _logger = new UnityCrossThreadLogger("MTGADataCollector");
     private bool _subscribedToAccountInfo = false;
     private bool _subscribedToInventory = false;
-    private bool _databaseLoaded = false;
 
     public void Start()
     {
@@ -30,10 +36,6 @@ namespace mtga_datacollector
 
     private void Initialize()
     {
-      if (!_databaseLoaded && WrapperController.Instance != null && WrapperController.Instance.CardDatabase != null)
-      {
-        LoadDatabase();
-      }
       if (!_subscribedToAccountInfo && WrapperController.Instance != null && WrapperController.Instance.AccountClient != null && WrapperController.Instance.AccountClient.AccountInformation != null && WrapperController.Instance.AccountClient.AccountInformation.AccountID != null)
       {
         SubscribeToAccountInfo();
@@ -42,7 +44,7 @@ namespace mtga_datacollector
       {
         CollectInventoryAndSubscribeToChanges();
       }
-      if (!_databaseLoaded || !_subscribedToInventory || !_subscribedToAccountInfo)
+      if (!_subscribedToInventory || !_subscribedToAccountInfo)
       {
         _logger.Info($"[initialization]Waiting for everyone to load {System.DateTime.Now:O}");
         System.Threading.Thread.Sleep(5000);
@@ -50,31 +52,6 @@ namespace mtga_datacollector
       }
 
       _logger.Info($"[initialization]Initialization is done at {System.DateTime.Now:O}. Ready to go!");
-    }
-
-    private void LoadDatabase()
-    {
-      _logger.Info($"[card-db]{WrapperController.Instance.CardDatabase}");
-      try
-      {
-        _logger.Info($"[card-db]Trying to write MID file");
-
-        File.WriteAllText("f:\\temp\\mtga\\MID.txt", JsonConvert.SerializeObject(WrapperController.Instance.CardDatabase.GetPrintingsByExpansion("MID"), new JsonSerializerSettings
-        {
-          Formatting = Formatting.Indented,
-          ReferenceLoopHandling = ReferenceLoopHandling.Serialize,
-          PreserveReferencesHandling = PreserveReferencesHandling.Objects,
-        }));
-
-        _logger.Info($"[card-db]MID file written");
-
-      }
-      catch (Exception e)
-      {
-        _logger.Info($"[card-db]Something wrong: {e}");
-      }
-
-      _databaseLoaded = true;
     }
 
     private void SubscribeToAccountInfo()
@@ -105,24 +82,43 @@ namespace mtga_datacollector
     {
       if (WrapperController.Instance != null && WrapperController.Instance.InventoryManager != null && WrapperController.Instance.InventoryManager.Cards != null && WrapperController.Instance.InventoryManager.Inventory != null)
       {
-        LogEntry cards = new LogEntry
+        try
         {
-          Attachment = WrapperController.Instance.InventoryManager.Cards,
-          Timestamp = String.Format($"{DateTime.Now:O}"),
-        };
+          var collection = WrapperController.Instance.InventoryManager.Cards.Select(pair =>
+          {
+            var cardPrinting = WrapperController.Instance.CardDatabase.GetPrintingByGrpId(pair.Key);
+            return new CardInventoryEntry
+            {
+              grpId = pair.Key,
+              count = pair.Value,
+              isRebalanced = cardPrinting.IsRebalanced,
+              rebalancedCardLink = cardPrinting.RebalancedCardLink
+            };
+          }).ToArray();
 
-        LogEntry inventory = new LogEntry
+          var collectionEntry = new LogEntry
+          {
+            Attachment = collection,
+            Timestamp = String.Format($"{DateTime.Now:O}"),
+          };
+
+          _logger.Info($"[collection]{JsonConvert.SerializeObject(collectionEntry)}");
+
+          LogEntry inventory = new LogEntry
+          {
+            Attachment = WrapperController.Instance.InventoryManager.Inventory,
+            Timestamp = String.Format($"{DateTime.Now:O}"),
+          };
+
+          _logger.Info($"[inventory]{JsonConvert.SerializeObject(inventory)}");
+        }
+        catch (Exception e)
         {
-          Attachment = WrapperController.Instance.InventoryManager.Inventory,
-          Timestamp = String.Format($"{DateTime.Now:O}"),
-        };
-
-        _logger.Info($"[collection]{JsonConvert.SerializeObject(cards)}");
-        _logger.Info($"[inventory]{JsonConvert.SerializeObject(inventory)}");
-
+          _logger.Info($"[collection]{JsonConvert.SerializeObject(e)}");
+        }
       }
 
-      Thread.Sleep(60000);
+      Thread.Sleep(TimeSpan.FromMinutes(30));
       PeriodicUpdater();
     }
 
@@ -140,6 +136,16 @@ namespace mtga_datacollector
     public void OnDestroy()
     {
       _logger.Info($"[initialization]Shutting down at {System.DateTime.Now:O}. Bye!");
+    }
+
+    public void OnDisable()
+    {
+      _logger.Info($"[initialization]Disabled at {System.DateTime.Now:O}. Oops!");
+    }
+
+    public void OnApplicationQuit()
+    {
+      _logger.Info($"[initialization]App quit at {System.DateTime.Now:O}. Bye bye!");
     }
   }
 }

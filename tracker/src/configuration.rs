@@ -5,7 +5,6 @@ use std::{
 
 pub struct Config {
     command: TrackerCommand,
-    database_path: PathBuf,
 }
 
 impl Config {
@@ -16,32 +15,57 @@ impl Config {
         let default_database_path = Path::new(r"./mtga-tracker.db");
         if args.len() == 1 {
             Ok(Config {
-                command: TrackerCommand::Inject(default_collector_path.to_path_buf()),
-                database_path: default_database_path.to_path_buf(),
+                command: TrackerCommand::Parse(ParseParams {
+                    collector_dll_path: default_collector_path.to_path_buf(),
+                    database_path: default_database_path.to_path_buf(),
+                }),
             })
         } else {
             let args: Vec<String> = args.into_iter().collect();
             match args[1].to_lowercase().as_str() {
-                "inject" => {
+                "dump" => {
                     let collector_path =
                         args.get(2).map_or(default_collector_path, |p| Path::new(p));
                     Ok(Config {
-                        command: TrackerCommand::Inject(collector_path.to_path_buf()),
-                        database_path: default_database_path.to_path_buf(),
+                        command: TrackerCommand::Dump(collector_path.to_path_buf()),
+                    })
+                }
+                "dumpartists" => {
+                    let scryfall_cards_json_path = Path::new(
+                        args.get(2)
+                            .ok_or("Please provide a scryfall cards db path")?,
+                    );
+
+                    let mtga_cards_json_path =
+                        Path::new(args.get(3).ok_or("Please provide an mtga cards db path")?);
+
+                    let output_file =
+                        Path::new(args.get(3).ok_or("Please provide an output file path")?);
+
+                    Ok(Config {
+                        command: TrackerCommand::DumpArtistMapping(DumpArtistMappingParams {
+                            scryfall_cards_json_path: scryfall_cards_json_path.to_path_buf(),
+                            mtga_cards_json_path: mtga_cards_json_path.to_path_buf(),
+                            output_file: output_file.to_path_buf(),
+                        }),
                     })
                 }
                 "createdb" => {
-                    let database_path =
-                        Path::new(args.get(2).ok_or("Please provide a database path")?);
+                    let scryfall_cards_json_path = Path::new(
+                        args.get(2)
+                            .ok_or("Please provide a scryfall cards db path")?,
+                    );
+                    let mtga_cards_json_path =
+                        Path::new(args.get(3).ok_or("Please provide an mtga cards db path")?);
 
-                    let required_sets = "MIR,WTH,MMQ,INV,PLS,ODY,TOR,JUD,ONS,LGN,SCG,8ED,MRD,DST,5DN,CHK,SOK,9ED,RAV,DIS,CSP,TSP,10E,LRW,MOR,SHM,ME2,ALA,ARB,M10,ZEN,WWK,ROE,M11,SOM,ME4,MBS,NPH,CMD,M12,ISD,DKA,AVR,CONF,M13,PLC,RTR,GTC,DGM,M14,THS,BNG,JOU,C13,MMA,M15,KTK,FRF,VMA,DTK,ORI,BFZ,OGW,SOI,EMN,AER,AKH,HOU,XLN,RIX,DAR,M19,ArenaSUP,G18,GRN,ANA,RNA,WAR,M20,ELD,THB,IKO,MH1,M21,JMP,UND,ZNR,C20,SLD,AKR,UST,KHM,ANB,KLR,MH2,STX,AFR,STA,CMR,2XM,MID,VOW,J21,NEO,Y22,SNC,HBG,DMU,C18,C21,CC2,NEC,UMA,WC".split(',').collect::<Vec<&str>>();
+                    let database_path = args.get(4).map_or(default_database_path, |p| Path::new(p));
 
                     Ok(Config {
-                        command: TrackerCommand::CreateDatabase(
-                            database_path.to_path_buf(),
-                            required_sets,
-                        ),
-                        database_path: default_database_path.to_path_buf(),
+                        command: TrackerCommand::CreateDatabase(CreateDatabaseParams {
+                            scryfall_cards_json_path: scryfall_cards_json_path.to_path_buf(),
+                            mtga_cards_json_path: mtga_cards_json_path.to_path_buf(),
+                            database_output_path: database_path.to_path_buf(),
+                        }),
                     })
                 }
                 _ => return Err("Unrecognized command".into()),
@@ -52,13 +76,28 @@ impl Config {
     pub fn command(&self) -> &TrackerCommand {
         &self.command
     }
-
-    pub fn database_path(&self) -> &PathBuf {
-        &self.database_path
-    }
 }
 
 pub enum TrackerCommand {
-    Inject(PathBuf),
-    CreateDatabase(PathBuf, Vec<&'static str>),
+    CreateDatabase(CreateDatabaseParams),
+    Parse(ParseParams),
+    DumpArtistMapping(DumpArtistMappingParams),
+    Dump(PathBuf),
+}
+
+pub struct ParseParams {
+    pub collector_dll_path: PathBuf,
+    pub database_path: PathBuf,
+}
+
+pub struct CreateDatabaseParams {
+    pub scryfall_cards_json_path: PathBuf,
+    pub mtga_cards_json_path: PathBuf,
+    pub database_output_path: PathBuf,
+}
+
+pub struct DumpArtistMappingParams {
+    pub scryfall_cards_json_path: PathBuf,
+    pub mtga_cards_json_path: PathBuf,
+    pub output_file: PathBuf,
 }

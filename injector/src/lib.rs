@@ -50,9 +50,49 @@ impl Mtga {
         )?;
 
         let load_method_ptr =
-            self.get_method_from_class(root_domain_ptr, loader_class_ptr, "Load")?;
+            self.get_method_from_class(root_domain_ptr, loader_class_ptr, "Load", 0)?;
 
-        self.invoke_load_from_runtime(root_domain_ptr, load_method_ptr)?;
+        self.runtime_invoke(root_domain_ptr, load_method_ptr, None)?;
+
+        Ok(())
+    }
+
+    pub fn inject_dumper<P>(&self, collector_path: P) -> Result<(), Box<dyn Error>>
+    where
+        P: AsRef<Path>,
+    {
+        let collector_data = fs::read(collector_path)?;
+        let root_domain_ptr = self.get_root_domain()?;
+        let load_image_ptr = self.create_mono_image_from_data(&collector_data, root_domain_ptr)?;
+
+        let datacollector_assembly_ptr =
+            self.create_mono_assembly_from_image(root_domain_ptr, load_image_ptr)?;
+        self.close_load_image(root_domain_ptr, load_image_ptr)?;
+
+        let assembly_image_ptr =
+            self.get_image_from_assembly(root_domain_ptr, datacollector_assembly_ptr)?;
+
+        let loader_class_ptr = self.get_class_from_image(
+            root_domain_ptr,
+            assembly_image_ptr,
+            "mtga_datacollector",
+            "Loader",
+        )?;
+
+        let load_method_ptr =
+            self.get_method_from_class(root_domain_ptr, loader_class_ptr, "LoadDumper", 1)?;
+
+        let memory_manager = self.process.get_memory_manager()?;
+
+        let dump_directory = Path::new("./assets/").canonicalize()?;
+        let dump_directory = dump_directory
+            .to_str()
+            .ok_or("cannot convert directory path to string")?;
+
+        let dump_dir_monostring_ptr = self.create_mono_string(root_domain_ptr, dump_directory)?;
+        let params_ptr = memory_manager.allocate_and_write(&dump_dir_monostring_ptr.to_le_bytes())?;
+
+        self.runtime_invoke(root_domain_ptr, load_method_ptr, Some(params_ptr))?;
 
         Ok(())
     }
@@ -335,6 +375,7 @@ impl Mtga {
         root_domain_ptr: usize,
         class_ptr: usize,
         method_name: &str,
+        num_params: u64,
     ) -> Result<usize, Box<dyn Error>> {
         let memory_manager = self.process.get_memory_manager()?;
 
@@ -374,7 +415,7 @@ impl Mtga {
         assembler.mov_rax(mono_class_get_method_from_name_fn.address().try_into()?);
         assembler.mov_rcx(class_ptr.try_into()?);
         assembler.mov_rdx(method_name_ptr.try_into()?);
-        assembler.mov_r8(0);
+        assembler.mov_r8(num_params);
         assembler.call_rax();
         assembler.mov_rax_to(ret_val_ptr);
 
@@ -391,10 +432,11 @@ impl Mtga {
         Ok(method_ptr)
     }
 
-    fn invoke_load_from_runtime(
+    fn runtime_invoke(
         &self,
         root_domain_ptr: usize,
         method_ptr: usize,
+        params_ptr: Option<usize>,
     ) -> Result<(), Box<dyn Error>> {
         let memory_manager = self.process.get_memory_manager()?;
 
@@ -429,7 +471,7 @@ impl Mtga {
         assembler.mov_rax(mono_runtime_invoke_fn.address().try_into()?);
         assembler.mov_rcx(method_ptr.try_into()?);
         assembler.mov_rdx(0);
-        assembler.mov_r8(0);
+        assembler.mov_r8(params_ptr.unwrap_or(0).try_into()?);
         assembler.mov_r9(exception_object_ptr.try_into()?);
         assembler.call_rax();
 
@@ -546,6 +588,58 @@ impl Mtga {
         self.process.execute(code_ptr)?;
         Ok(())
     }
+
+    fn create_mono_string(&self, root_domain_ptr: usize, s: &str) -> Result<usize, Box<dyn Error>> {
+        let memory_manager = self.process.get_memory_manager()?;
+
+        // functions
+        let mono_thread_attach_fn = self
+            .mono_functions
+            .get(&RequiredFunction::MonoThreadAttach)
+            .ok_or("Could not find mono_thread_attach()")?;
+
+        let mono_string_new_len_fn = self
+            .mono_functions
+            .get(&RequiredFunction::MonoStringNewLen)
+            .ok_or("Could not find mono_string_new_len()")?;
+
+        // params
+        let s = Vec::from(s.as_bytes());
+        let s_ptr = memory_manager.allocate_and_write(&s)?;
+
+        // output
+        let ret_val = memory_manager.allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])?;
+
+        // assembly
+        let mut assembler = Assembler::new();
+        assembler.sub_rsp(0x28);
+
+        // register our thread with mono
+        assembler.mov_rax(mono_thread_attach_fn.address().try_into()?);
+        assembler.mov_rcx(root_domain_ptr.try_into()?);
+        assembler.call_rax();
+
+        /*
+        MONO_API MONO_RT_EXTERNAL_ONLY
+        MonoString* mono_string_new_len (MonoDomain *domain, const char *text, unsigned int length);
+        */
+        assembler.mov_rax(mono_string_new_len_fn.address().try_into()?);
+        assembler.mov_rcx(root_domain_ptr.try_into()?);
+        assembler.mov_rdx(s_ptr.try_into()?);
+        assembler.mov_r8(s.len().try_into()?);
+        assembler.call_rax();
+        assembler.mov_rax_to(ret_val);
+        assembler.add_rsp(0x28);
+        assembler.ret();
+
+        // execute and return
+        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
+        self.process.execute(code_ptr)?;
+
+        let mut string_ptr = 0_usize;
+        memory_manager.read_from_address(ret_val, &mut string_ptr)?;
+        Ok(string_ptr)
+    }
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -559,6 +653,7 @@ enum RequiredFunction {
     MonoRuntimeInvoke,
     MonoAssemblyGetImage,
     MonoImageClose,
+    MonoStringNewLen,
 }
 
 impl TryFrom<&str> for RequiredFunction {
@@ -575,6 +670,7 @@ impl TryFrom<&str> for RequiredFunction {
             "mono_runtime_invoke" => Ok(RequiredFunction::MonoRuntimeInvoke),
             "mono_assembly_get_image" => Ok(RequiredFunction::MonoAssemblyGetImage),
             "mono_image_close" => Ok(RequiredFunction::MonoImageClose),
+            "mono_string_new_len" => Ok(RequiredFunction::MonoStringNewLen),
             _ => Err("Could not match function to any of the required ones"),
         }
     }
