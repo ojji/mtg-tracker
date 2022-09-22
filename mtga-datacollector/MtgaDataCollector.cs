@@ -8,19 +8,24 @@ using System.Linq;
 
 namespace mtga_datacollector
 {
-  public class LogEntry
+  public class CollectorEvent
   {
     public string Timestamp;
     public object Attachment;
   }
 
-  public class CardInventoryEntry
+  public class AccountData
+  {
+    public string userId;
+    public string screenName;
+  }
+
+  public class CardInventoryData
   {
     public uint grpId;
     public int count;
-    public bool isRebalanced;
-    public uint rebalancedCardLink;
   }
+
   public class MtgaDataCollector : MonoBehaviour
   {
     private UnityCrossThreadLogger _logger = new UnityCrossThreadLogger("MTGADataCollector");
@@ -36,11 +41,11 @@ namespace mtga_datacollector
 
     private void Initialize()
     {
-      if (!_subscribedToAccountInfo && WrapperController.Instance != null && WrapperController.Instance.AccountClient != null && WrapperController.Instance.AccountClient.AccountInformation != null && WrapperController.Instance.AccountClient.AccountInformation.AccountID != null)
+      if (!_subscribedToAccountInfo)
       {
         SubscribeToAccountInfo();
       }
-      if (!_subscribedToInventory && WrapperController.Instance != null && WrapperController.Instance.InventoryManager != null && WrapperController.Instance.InventoryManager.Cards != null && WrapperController.Instance.InventoryManager.Cards.Count > 0)
+      if (!_subscribedToInventory)
       {
         CollectInventoryAndSubscribeToChanges();
       }
@@ -56,9 +61,30 @@ namespace mtga_datacollector
 
     private void SubscribeToAccountInfo()
     {
-      WrapperController.Instance.AccountClient.LoginStateChanged += AccountClientLoginStateChanged;
-      _logger.Info($"[account-info]{new { UserId = WrapperController.Instance.AccountClient.AccountInformation.AccountID, ScreenName = WrapperController.Instance.AccountClient.AccountInformation.DisplayName }}");
-      _subscribedToAccountInfo = true;
+      if (WrapperController.Instance != null && WrapperController.Instance.AccountClient != null && WrapperController.Instance.AccountClient.AccountInformation != null && WrapperController.Instance.AccountClient.AccountInformation.AccountID != null)
+      {
+        try
+        {
+          WrapperController.Instance.AccountClient.LoginStateChanged += AccountClientLoginStateChanged;
+          var accountInfo = new AccountData
+          {
+            userId = WrapperController.Instance.AccountClient.AccountInformation.AccountID,
+            screenName = WrapperController.Instance.AccountClient.AccountInformation.DisplayName
+          };
+
+          var logEntry = new CollectorEvent {
+            Attachment = accountInfo,
+            Timestamp = String.Format($"{DateTime.Now:O}"),
+          };
+
+          _logger.Info($"[account-info]{JsonConvert.SerializeObject(logEntry)}");
+          _subscribedToAccountInfo = true;
+        }
+        catch (Exception e)
+        {
+          _logger.Info($"[account-info-error]{JsonConvert.SerializeObject(e)}");
+        }
+      }
     }
 
     private void AccountClientLoginStateChanged(LoginState obj)
@@ -66,16 +92,31 @@ namespace mtga_datacollector
       _logger.Info($"[loginstate]{obj}");
       _subscribedToAccountInfo = false;
       _subscribedToInventory = false;
+      if (WrapperController.Instance != null && WrapperController.Instance.AccountClient != null && WrapperController.Instance.AccountClient.AccountInformation != null && WrapperController.Instance.AccountClient.AccountInformation.AccountID != null)
+      {
+        WrapperController.Instance.AccountClient.LoginStateChanged -= AccountClientLoginStateChanged;
+      }
       Task.Run(Initialize);
     }
 
     private void CollectInventoryAndSubscribeToChanges()
     {
-      WrapperController.Instance.InventoryManager.UnsubscribeFromAll(this.UpdateInventory);
-      WrapperController.Instance.InventoryManager.SubscribeToAll(this.UpdateInventory);
-      _subscribedToInventory = true;
+      if (WrapperController.Instance != null && WrapperController.Instance.InventoryManager != null && WrapperController.Instance.InventoryManager.Cards != null && WrapperController.Instance.InventoryManager.Cards.Count > 0)
+      {
+        try
+        {
+          WrapperController.Instance.InventoryManager.UnsubscribeFromAll(this.UpdateInventory);
+          WrapperController.Instance.InventoryManager.SubscribeToAll(this.UpdateInventory);
+          _subscribedToInventory = true;
 
-      Task.Run(PeriodicUpdater);
+          Task.Run(PeriodicUpdater);
+        }
+        catch (Exception e)
+        {
+          _logger.Info($"[collection-error]{JsonConvert.SerializeObject(e)}");
+        }
+      }
+
     }
 
     private void PeriodicUpdater()
@@ -86,17 +127,14 @@ namespace mtga_datacollector
         {
           var collection = WrapperController.Instance.InventoryManager.Cards.Select(pair =>
           {
-            var cardPrinting = WrapperController.Instance.CardDatabase.GetPrintingByGrpId(pair.Key);
-            return new CardInventoryEntry
+            return new CardInventoryData
             {
               grpId = pair.Key,
               count = pair.Value,
-              isRebalanced = cardPrinting.IsRebalanced,
-              rebalancedCardLink = cardPrinting.RebalancedCardLink
             };
           }).ToArray();
 
-          var collectionEntry = new LogEntry
+          var collectionEntry = new CollectorEvent
           {
             Attachment = collection,
             Timestamp = String.Format($"{DateTime.Now:O}"),
@@ -104,7 +142,7 @@ namespace mtga_datacollector
 
           _logger.Info($"[collection]{JsonConvert.SerializeObject(collectionEntry)}");
 
-          LogEntry inventory = new LogEntry
+          CollectorEvent inventory = new CollectorEvent
           {
             Attachment = WrapperController.Instance.InventoryManager.Inventory,
             Timestamp = String.Format($"{DateTime.Now:O}"),
@@ -114,7 +152,7 @@ namespace mtga_datacollector
         }
         catch (Exception e)
         {
-          _logger.Info($"[collection]{JsonConvert.SerializeObject(e)}");
+          _logger.Info($"[collection-error]{JsonConvert.SerializeObject(e)}");
         }
       }
 
@@ -124,7 +162,7 @@ namespace mtga_datacollector
 
     private void UpdateInventory(ClientInventoryUpdateReportItem payload)
     {
-      LogEntry inventoryUpdate = new LogEntry
+      CollectorEvent inventoryUpdate = new CollectorEvent
       {
         Timestamp = String.Format($"{DateTime.Now:O}"),
         Attachment = payload

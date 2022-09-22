@@ -1,4 +1,4 @@
-//! The main model types are `InventoryUpdateEvent` and `CollectionEvent`, appearing as the main JSON objects in the
+//! The main model types are `AccountInfoEvent`, `InventoryUpdateEvent` and `CollectionEvent`, appearing as the main JSON objects in the
 //! log file. Every main model type has a `Timestamp` and an `Attachment` field, describing when the event occured and
 //! containing the detailed event object.
 
@@ -1135,8 +1135,6 @@ pub struct CollectionEvent {
 pub struct CollectedCard {
     pub grp_id: u32,
     pub count: i32,
-    pub is_rebalanced: bool,
-    pub rebalanced_card_link: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1263,7 +1261,39 @@ impl TrackerCard {
         self.collector_number.as_ref()
     }
 
-    pub fn get_all(db: &Connection) -> Result<HashMap<u32, TrackerCard>, Box<dyn Error>> {
+    pub fn get_by_id(db: &Connection, arena_id: u32) -> Result<TrackerCard, Box<dyn Error>> {
+        let mut stmt = db.prepare(
+            "SELECT cards_db.'name',
+                        cards_db.'set',
+                        cards_db.'collector_number',
+                        cards_db.'scry_uri',
+                        cards_db.'arena_id',
+                        cards_db.'image_uri',
+                        cards_db.'rarity',
+                        cards_db.'in_booster'
+                FROM cards_db
+                WHERE cards_db.'arena_id' = ?1",
+        )?;
+
+        let mut results = stmt.query(rusqlite::params![arena_id])?;
+        if let Some(row) = results.next()? {
+            let card = TrackerCard {
+                name: row.get(0)?,
+                set: row.get(1)?,
+                collector_number: row.get(2)?,
+                scry_uri: row.get(3)?,
+                arena_id,
+                image_uri: row.get(5)?,
+                rarity: row.get(6)?,
+                in_booster: row.get(7)?,
+            };
+            return Ok(card);
+        } else {
+            return Err("Invalid arena_id".into());
+        }
+    }
+
+    pub fn get_all_cards(db: &Connection) -> Result<HashMap<u32, TrackerCard>, Box<dyn Error>> {
         let mut tracker_cards = HashMap::new();
 
         let mut stmt = db.prepare(
@@ -1308,3 +1338,18 @@ impl TrackerCard {
         Ok(tracker_cards)
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct AccountInfoEvent {
+    pub timestamp: String,
+    pub attachment: AccountInfoData,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountInfoData {
+    pub user_id: String,
+    pub screen_name: String,
+}
+

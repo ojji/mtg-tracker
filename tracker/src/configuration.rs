@@ -1,5 +1,5 @@
 use std::{
-    env::Args,
+    env,
     path::{Path, PathBuf},
 };
 
@@ -8,7 +8,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(args: Args) -> Result<Config, Box<dyn std::error::Error>> {
+    pub fn new(args: env::Args) -> Result<Config, Box<dyn std::error::Error>> {
         let default_collector_path = Path::new(
             r"./mtga-datacollector/bin/x64/Release/netstandard2.1/mtga-datacollector.dll",
         );

@@ -1,9 +1,10 @@
 use injector::Mtga;
 
 use crate::configuration::{Config, TrackerCommand};
-use crate::mtgadb::model::CollectionEvent;
-use crate::mtgadb::MtgaDb;
+use crate::mtgadb::model::{AccountInfoData, AccountInfoEvent, CollectionEvent};
+use crate::mtgadb::{MtgaDb, UserSession};
 
+use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -11,20 +12,18 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread::JoinHandle;
 use std::time::Duration;
-use std::{env, env::Args};
 
 pub struct Tracker {
-    config: Config,
+    user_session: Option<UserSession>,
 }
 
 impl Tracker {
-    pub fn new(args: Args) -> Result<Tracker, Box<dyn Error>> {
-        let config = Config::new(args)?;
-        Ok(Tracker { config })
+    pub fn new() -> Tracker {
+        Tracker { user_session: None }
     }
 
-    pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        match self.config.command() {
+    pub fn run(&mut self, config: Config) -> Result<(), Box<dyn Error>> {
+        match config.command() {
             TrackerCommand::CreateDatabase(params) => self.create_database(
                 &params.scryfall_cards_json_path,
                 &params.mtga_cards_json_path,
@@ -66,7 +65,7 @@ impl Tracker {
         Ok(())
     }
 
-    fn parse<P>(&self, collector_dll_path: P, database_path: P) -> Result<(), Box<dyn Error>>
+    fn parse<P>(&mut self, collector_dll_path: P, database_path: P) -> Result<(), Box<dyn Error>>
     where
         P: AsRef<Path>,
     {
@@ -112,24 +111,52 @@ impl Tracker {
         Ok(())
     }
 
-    fn parse_line(&self, database: &MtgaDb, line: &str) -> Result<(), Box<dyn Error>> {
-        if line.starts_with("[MTGADataCollector][collection]") {
-            let prefix = "[MTGADataCollector][collection]";
-            let collection: CollectionEvent = serde_json::from_str(&line[prefix.len()..])?;
-            assert!(!collection.attachment.is_empty());
+    fn parse_line(&mut self, database: &MtgaDb, line: &str) -> Result<(), Box<dyn Error>> {
+        const COLLECTION_PREFIX: &str = "[MTGADataCollector][collection]";
+        const INVENTORY_PREFIX: &str = "[MTGADataCollector][inventory]";
+        const INVENTORY_UPDATE_PREFIX: &str = "[MTGADataCollector][inventory-update]";
+        const ACCOUNT_INFO_PREFIX: &str = "[MTGADataCollector][account-info]";
+
+        if line.starts_with(ACCOUNT_INFO_PREFIX) {
+            let account_info: AccountInfoEvent =
+                serde_json::from_str(&line[ACCOUNT_INFO_PREFIX.len()..])?;
+            println!("Account_info update at: {}", account_info.timestamp);
+            self.update_user_session(database, account_info.attachment)?;
+            println!(
+                "Current user: {}",
+                self.user_session
+                    .as_ref()
+                    .ok_or("No user session is set")?
+                    .screen_name()
+            )
+        } else if line.starts_with(COLLECTION_PREFIX) {
+            let collection: CollectionEvent =
+                serde_json::from_str(&line[COLLECTION_PREFIX.len()..])?;
             println!("Collection update at: {}", collection.timestamp);
-
-            for collected_card in collection.attachment {
-                let card_name = match database.get_card(collected_card.grp_id) {
-                    Some(card) => String::from(card.name()),
-                    None => format!("Unrecognized card #{}", collected_card.grp_id),
-                };
-
-                println!("{} {}", collected_card.count, card_name);
-            }
-        } else if line.starts_with("[MTGADataCollector][inventory]") {
-        } else if line.starts_with("[MTGADataCollector][inventory-update]") {
+            let current_user = self.user_session.as_ref().ok_or("No user session is set")?;
+            self.update_user_collection(database, current_user, collection)?;
+        } else if line.starts_with(INVENTORY_PREFIX) {
+        } else if line.starts_with(INVENTORY_UPDATE_PREFIX) {
         }
+        Ok(())
+    }
+
+    fn update_user_session(
+        &mut self,
+        database: &MtgaDb,
+        account_info: AccountInfoData,
+    ) -> Result<(), Box<dyn Error>> {
+        self.user_session = Some(database.get_user_session(account_info)?);
+        Ok(())
+    }
+
+    fn update_user_collection(
+        &self,
+        database: &MtgaDb,
+        current_user: &UserSession,
+        collection: CollectionEvent,
+    ) -> Result<(), Box<dyn Error>> {
+        database.update_user_collection(current_user, collection)?;
         Ok(())
     }
 }

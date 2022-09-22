@@ -1,2 +1,3 @@
 [workspace]
 members = ["injector", "tracker"]
+resolver = "2"

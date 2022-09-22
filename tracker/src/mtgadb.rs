@@ -1,20 +1,19 @@
 pub mod model;
 
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
+use std::io::Write;
 use std::path::Path;
 use std::vec;
-use std::collections::{HashMap, HashSet};
-use std::io::Write;
 
-use rusqlite::{params, Connection};
-use serde_json;
+use rusqlite::{params, Connection, Transaction};
 
 use model::{MtgaCard, ScryCard, TrackerCard};
 
 pub struct MtgaDb {
-    tracker_cards: HashMap<u32, TrackerCard>,
+    db: Connection,
 }
 
 impl MtgaDb {
@@ -23,9 +22,8 @@ impl MtgaDb {
         P: AsRef<Path>,
     {
         let db = Connection::open(database_path)?;
-        let tracker_cards = TrackerCard::get_all(&db)?;
 
-        Ok(MtgaDb { tracker_cards })
+        Ok(MtgaDb { db })
     }
 
     pub fn create_database<P>(
@@ -155,7 +153,15 @@ impl MtgaDb {
         );
 
         let start = std::time::Instant::now();
-        MtgaDb::export_mapped_cards(&mapped_cards, database_path)?;
+        let mut db = Connection::open(database_path)?;
+        let tx = db.transaction()?;
+
+        MtgaDb::export_mapped_cards(&mapped_cards, &tx)?;
+        MtgaDb::create_users(&tx)?;
+        MtgaDb::create_user_collection(&tx)?;
+
+        tx.commit()?;
+
         let elapsed = start.elapsed();
 
         println!(
@@ -166,20 +172,10 @@ impl MtgaDb {
         Ok(())
     }
 
-    pub fn arena_cards(&self) -> &HashMap<u32, TrackerCard> {
-        &self.tracker_cards
-    }
-
-    pub fn export_mapped_cards<P>(
+    pub fn export_mapped_cards(
         mapped_cards: &HashMap<u32, (&MtgaCard, &ScryCard)>,
-        path: P,
-    ) -> Result<(), Box<dyn Error>>
-    where
-        P: AsRef<Path>,
-    {
-        let mut db = Connection::open(path)?;
-        let tx = db.transaction()?;
-
+        tx: &Transaction,
+    ) -> Result<(), Box<dyn Error>> {
         tx.execute("DROP TABLE IF EXISTS cards_db", [])?;
         tx.execute(
             "CREATE TABLE IF NOT EXISTS cards_db (
@@ -196,9 +192,12 @@ impl MtgaDb {
             [],
         )?;
 
-        tx.execute("CREATE INDEX arena_id_idx ON cards_db('arena_id')", [])?;
-        tx.execute("CREATE INDEX set_idx ON cards_db('set')", [])?;
-        tx.execute("CREATE INDEX rarity_idx ON cards_db('rarity')", [])?;
+        tx.execute(
+            "CREATE INDEX cards_db_arena_id_idx ON cards_db('arena_id')",
+            [],
+        )?;
+        tx.execute("CREATE INDEX cards_db_set_idx ON cards_db('set')", [])?;
+        tx.execute("CREATE INDEX cards_db_rarity_idx ON cards_db('rarity')", [])?;
 
         for (&_, &(mtga_card, scry_card)) in mapped_cards {
             let tracker_card = TrackerCard::new(mtga_card, scry_card);
@@ -216,13 +215,26 @@ impl MtgaDb {
                 tracker_card.in_booster() as i32
                 ])?;
         }
-
-        tx.commit()?;
         Ok(())
     }
 
-    pub fn get_card(&self, arena_id: u32) -> Option<&TrackerCard> {
-        self.tracker_cards.get(&arena_id)
+    fn create_users(tx: &Transaction) -> Result<(), Box<dyn Error>> {
+        tx.execute(
+            "CREATE TABLE IF NOT EXISTS users (
+            'user_id' INTEGER PRIMARY KEY,
+            'arena_id' TEXT NOT NULL,
+            'screen_name' TEXT NOT NULL
+        )",
+            params![],
+        )?;
+
+        tx.execute("CREATE INDEX users_arena_id_idx ON users('arena_id')", [])?;
+
+        Ok(())
+    }
+
+    pub fn get_card_by_id(&self, arena_id: u32) -> Option<TrackerCard> {
+        TrackerCard::get_by_id(&self.db, arena_id).ok()
     }
 
     pub fn get_scry_card_for_mtga_card<'a>(
@@ -640,5 +652,94 @@ impl MtgaDb {
         )?;
 
         Ok(())
+    }
+
+    pub fn get_user_session(
+        &self,
+        account_info: model::AccountInfoData,
+    ) -> Result<UserSession, Box<dyn Error>> {
+        let mut stmt = self.db.prepare(
+            "
+            SELECT users.'user_id', users.'arena_id', users.'screen_name'
+            FROM users
+            WHERE users.'arena_id' = ?1",
+        )?;
+
+        let mut results = stmt.query(params![account_info.user_id])?;
+
+        match results.next()? {
+            Some(user) => {
+                return Ok(UserSession {
+                    user_id: user.get(0)?,
+                    arena_id: user.get(1)?,
+                    screen_name: user.get(2)?,
+                })
+            }
+            None => {
+                self.db.execute(
+                    "
+                INSERT INTO users ('arena_id', 'screen_name')
+                VALUES (?1, ?2)",
+                    params![account_info.user_id, account_info.screen_name],
+                )?;
+
+                return self.get_user_session(account_info);
+            }
+        }
+    }
+
+    fn create_user_collection(tx: &Transaction) -> Result<(), Box<dyn Error>> {
+        tx.execute(
+            "CREATE TABLE IF NOT EXISTS user_collections (
+            'collection_id' INTEGER PRIMARY KEY,
+            'user_id' INTEGER NOT NULL,
+            'timestamp' TEXT NOT NULL,
+            'collection_data' BLOB NOT NULL
+        )",
+            params![],
+        )?;
+
+        tx.execute(
+            "CREATE INDEX user_collections_user_id_idx ON user_collections('user_id')",
+            [],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn update_user_collection(
+        &self,
+        current_user: &UserSession,
+        collection_update: model::CollectionEvent,
+    ) -> Result<(), Box<dyn Error>> {
+        self.db.execute(
+            "
+            INSERT INTO user_collections
+                ('user_id', 'timestamp', 'collection_data')
+            VALUES (?1, ?2, ?3)",
+            params![
+            current_user.user_id,
+            collection_update.timestamp,
+            serde_json::to_string(&collection_update.attachment)?
+            ],
+        )?;
+
+        Ok(())
+    }
+}
+
+/// Type representing a user in the tracker client
+pub struct UserSession {
+    /// The collector user id
+    user_id: u32,
+    /// The user id in the MTGA client
+    arena_id: String,
+    /// The user's name in the MTGA client
+    screen_name: String,
+}
+
+impl UserSession {
+    pub fn screen_name(&self) -> &str {
+        &self.screen_name
     }
 }

@@ -1,9 +1,11 @@
-use tracker::tracker::Tracker;
+#![windows_subsystem = "windows"]
 
+use std::env;
+use tracker::{configuration::Config, tracker::Tracker};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = std::env::args();
-    let tracker = Tracker::new(args)?;
-    tracker.run()?;
+    let config = Config::new(env::args())?;
+    let mut tracker = Tracker::new();
+    tracker.run(config)?;
     Ok(())
 }
