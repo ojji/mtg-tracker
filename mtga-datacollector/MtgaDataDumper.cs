@@ -38,14 +38,14 @@ namespace mtga_datacollector
 
     private void DumpEverything()
     {
-      if (!_dataDumped && WrapperController.Instance != null && WrapperController.Instance.CardDatabase != null)
+      if (!_dataDumped && WrapperController.Instance != null && WrapperController.Instance.CardDatabase != null && WrapperController.Instance.CardDatabase.DatabaseUtilities != null && WrapperController.Instance.CardDatabase.CardTitleProvider != null)
       {
         try
         {
           string[] requiredSets = {"ANA", "ANB", "AHA1", "AHA2", "AHA3", "AHA4", "AHA5", "AHA6", "EA1", "XLN",
             "RIX", "DAR" /* this is "DOM" they just renamed it for some reason */, "M19", "GRN", "RNA", "WAR", "M20", "ELD", "THB", "IKO", "M21", "JMP",
             "AKR", "ZNR", "KLR", "KHM", "STX", "STA", "AFR", "MH1", "MH2", "J21", "MID", "Y22-MID" /* YMID in scry */,
-            "VOW", "NEO", "Y22-NEO", "SNC", "Y22-SNC", "HBG", "DMU"};
+            "VOW", "NEO", "Y22-NEO", "SNC", "Y22-SNC", "HBG", "DMU", "Y23-DMU" /* YDMU in scry */ };
 
           var setsWithCards = new Dictionary<string, List<CardPrintingData>>();
           foreach (var set in requiredSets)
@@ -57,7 +57,7 @@ namespace mtga_datacollector
 
           var db = WrapperController.Instance.CardDatabase;
 
-          var allCards = WrapperController.Instance.CardDatabase.GetAllPrintings().Values;
+          var allCards = WrapperController.Instance.CardDatabase.DatabaseUtilities.GetAllPrintings().Values;
 
           foreach (var card in allCards)
           {
@@ -91,7 +91,7 @@ namespace mtga_datacollector
             {
               var cardData = new MtgaPrintingData
               {
-                name = NormalizeName(db.GetCardTitleByGRPId(card.GrpId)),
+                name = NormalizeName(db.CardTitleProvider.GetCardTitle(card.GrpId)),
                 set = GetScrySetName(set.Key, card),
                 arenaId = card.GrpId,
                 isPrimaryCard = card.IsPrimaryCard,
@@ -179,6 +179,7 @@ namespace mtga_datacollector
         case "Y22-MID": return "ymid";
         case "Y22-SNC": return "ysnc";
         case "Y22-NEO": return "yneo";
+        case "Y23-DMU": return "ydmu";
         case "DAR": return "dom";
         case "G18": return "m19"; // m19 gift card
         default: return arenaSetName.ToLower();

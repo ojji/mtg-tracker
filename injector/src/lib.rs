@@ -3,126 +3,157 @@ mod process;
 mod utils;
 
 use assembler::Assembler;
-use process::{processes, ExportedFunction, Module, Process};
-use std::{collections::HashMap, convert::TryInto, error::Error, fs, path::Path};
 
-pub struct Mtga {
+use async_std::{path::Path, stream::StreamExt};
+use process::{processes, ExportedFunction, Module, Process};
+use std::collections::HashMap;
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+pub struct Injector {
     process: Process,
-    mono_functions: HashMap<RequiredFunction, process::ExportedFunction>,
+    mono_functions: HashMap<RequiredFunction, ExportedFunction>,
 }
 
-impl Mtga {
-    pub fn new() -> Result<Mtga, Box<dyn Error>> {
+impl Injector {
+    pub async fn new() -> Result<Injector> {
         let process = processes()
             .find(|process| process.name() == "MTGA.exe")
+            .await
             .ok_or("Could not find MTGA.exe")?;
 
-        let mono_module = Mtga::find_mono_module(&process)?;
+        let mono_module = Injector::find_mono_module(&process).await?;
 
-        let mono_functions = Mtga::find_required_mono_functions(&process, &mono_module)?;
-
-        Ok(Mtga {
+        let mono_functions = Injector::find_required_mono_functions(&process, &mono_module).await?;
+        Ok(Injector {
             process,
             mono_functions,
         })
     }
 
-    pub fn inject_tracker<P>(&self, collector_path: P) -> Result<(), Box<dyn Error>>
+    pub async fn inject_tracker<P>(&self, collector_path: P) -> Result<()>
     where
         P: AsRef<Path>,
     {
-        let collector_data = fs::read(collector_path)?;
-        let root_domain_ptr = self.get_root_domain()?;
-        let load_image_ptr = self.create_mono_image_from_data(&collector_data, root_domain_ptr)?;
+        let collector_data = async_std::fs::read(collector_path).await?;
+        let root_domain_ptr = self.get_root_domain().await?;
+        let load_image_ptr = self
+            .create_mono_image_from_data(&collector_data, root_domain_ptr)
+            .await?;
 
-        let datacollector_assembly_ptr =
-            self.create_mono_assembly_from_image(root_domain_ptr, load_image_ptr)?;
-        self.close_load_image(root_domain_ptr, load_image_ptr)?;
+        let datacollector_assembly_ptr = self
+            .create_mono_assembly_from_image(root_domain_ptr, load_image_ptr)
+            .await?;
+        self.close_load_image(root_domain_ptr, load_image_ptr)
+            .await?;
 
-        let assembly_image_ptr =
-            self.get_image_from_assembly(root_domain_ptr, datacollector_assembly_ptr)?;
+        let assembly_image_ptr = self
+            .get_image_from_assembly(root_domain_ptr, datacollector_assembly_ptr)
+            .await?;
 
-        let loader_class_ptr = self.get_class_from_image(
-            root_domain_ptr,
-            assembly_image_ptr,
-            "mtga_datacollector",
-            "Loader",
-        )?;
+        let loader_class_ptr = self
+            .get_class_from_image(
+                root_domain_ptr,
+                assembly_image_ptr,
+                "mtga_datacollector",
+                "Loader",
+            )
+            .await?;
 
-        let load_method_ptr =
-            self.get_method_from_class(root_domain_ptr, loader_class_ptr, "Load", 0)?;
+        let load_method_ptr = self
+            .get_method_from_class(root_domain_ptr, loader_class_ptr, "Load", 0)
+            .await?;
 
-        self.runtime_invoke(root_domain_ptr, load_method_ptr, None)?;
+        self.runtime_invoke(root_domain_ptr, load_method_ptr, None)
+            .await?;
 
         Ok(())
     }
 
-    pub fn inject_dumper<P>(&self, collector_path: P) -> Result<(), Box<dyn Error>>
+    pub async fn inject_dumper<P>(&self, collector_path: P) -> Result<()>
     where
         P: AsRef<Path>,
     {
-        let collector_data = fs::read(collector_path)?;
-        let root_domain_ptr = self.get_root_domain()?;
-        let load_image_ptr = self.create_mono_image_from_data(&collector_data, root_domain_ptr)?;
+        let collector_data = async_std::fs::read(collector_path).await?;
+        let root_domain_ptr = self.get_root_domain().await?;
+        let load_image_ptr = self
+            .create_mono_image_from_data(&collector_data, root_domain_ptr)
+            .await?;
 
-        let datacollector_assembly_ptr =
-            self.create_mono_assembly_from_image(root_domain_ptr, load_image_ptr)?;
-        self.close_load_image(root_domain_ptr, load_image_ptr)?;
+        let datacollector_assembly_ptr = self
+            .create_mono_assembly_from_image(root_domain_ptr, load_image_ptr)
+            .await?;
+        self.close_load_image(root_domain_ptr, load_image_ptr)
+            .await?;
 
-        let assembly_image_ptr =
-            self.get_image_from_assembly(root_domain_ptr, datacollector_assembly_ptr)?;
+        let assembly_image_ptr = self
+            .get_image_from_assembly(root_domain_ptr, datacollector_assembly_ptr)
+            .await?;
 
-        let loader_class_ptr = self.get_class_from_image(
-            root_domain_ptr,
-            assembly_image_ptr,
-            "mtga_datacollector",
-            "Loader",
-        )?;
+        let loader_class_ptr = self
+            .get_class_from_image(
+                root_domain_ptr,
+                assembly_image_ptr,
+                "mtga_datacollector",
+                "Loader",
+            )
+            .await?;
 
-        let load_method_ptr =
-            self.get_method_from_class(root_domain_ptr, loader_class_ptr, "LoadDumper", 1)?;
+        let load_method_ptr = self
+            .get_method_from_class(root_domain_ptr, loader_class_ptr, "LoadDumper", 1)
+            .await?;
 
-        let memory_manager = self.process.get_memory_manager()?;
+        let memory_manager = self.process.get_memory_manager().await?;
 
-        let dump_directory = Path::new("./assets/").canonicalize()?;
+        let dump_directory = Path::new("./assets/").canonicalize().await?;
         let dump_directory = dump_directory
             .to_str()
             .ok_or("cannot convert directory path to string")?;
 
-        let dump_dir_monostring_ptr = self.create_mono_string(root_domain_ptr, dump_directory)?;
-        let params_ptr = memory_manager.allocate_and_write(&dump_dir_monostring_ptr.to_le_bytes())?;
+        let dump_dir_monostring_ptr = self
+            .create_mono_string(root_domain_ptr, dump_directory)
+            .await?;
+        let params_ptr = memory_manager
+            .allocate_and_write(&dump_dir_monostring_ptr.to_le_bytes())
+            .await?;
 
-        self.runtime_invoke(root_domain_ptr, load_method_ptr, Some(params_ptr))?;
+        self.runtime_invoke(root_domain_ptr, load_method_ptr, Some(params_ptr))
+            .await?;
 
         Ok(())
     }
 
-    fn find_mono_module(process: &Process) -> Result<Module, Box<dyn Error>> {
+    async fn find_mono_module(process: &Process) -> Result<process::Module> {
         let mono_module = process
             .modules()
             .find(|module| module.name().starts_with("mono-"))
+            .await
             .ok_or("Could not find the mono module")?;
 
         Ok(mono_module)
     }
 
-    fn find_required_mono_functions(
+    async fn find_required_mono_functions(
         process: &Process,
         mono_module: &Module,
-    ) -> Result<HashMap<RequiredFunction, ExportedFunction>, Box<dyn Error>> {
+    ) -> Result<HashMap<RequiredFunction, ExportedFunction>> {
         let mut required_functions = HashMap::new();
-
-        for exported_fn in process.get_exports_for_module(mono_module)?.into_iter() {
-            if let Ok(required_fn) = RequiredFunction::try_from(exported_fn.name()) {
-                required_functions.entry(required_fn).or_insert(exported_fn);
-            }
-        }
+        async_std::stream::from_iter(process.get_exports_for_module(mono_module).await?)
+            .filter_map(
+                |exported_fn| match RequiredFunction::try_from(exported_fn.name()) {
+                    Ok(required_fn) => Some((required_fn, exported_fn)),
+                    Err(_) => None,
+                },
+            )
+            .for_each(|pair| {
+                required_functions.entry(pair.0).or_insert(pair.1);
+            })
+            .await;
 
         Ok(required_functions)
     }
 
-    fn get_root_domain(&self) -> Result<usize, Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    async fn get_root_domain(&self) -> Result<usize> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let get_root_domain_fn = self
@@ -133,7 +164,9 @@ impl Mtga {
         // params
 
         // out params
-        let ret_val_ptr = memory_manager.allocate_and_write(&[0; std::mem::size_of::<usize>()])?;
+        let ret_val_ptr = memory_manager
+            .allocate_and_write(&[0; std::mem::size_of::<usize>()])
+            .await?;
 
         /*
         MONO_API MonoDomain* mono_get_root_domain (void);
@@ -147,20 +180,22 @@ impl Mtga {
         assembler.ret();
 
         // execute and return
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
 
         let mut get_root_domain_ptr = 0_usize;
-        memory_manager.read_from_address(ret_val_ptr, &mut get_root_domain_ptr)?;
+        memory_manager
+            .read_from_address(ret_val_ptr, &mut get_root_domain_ptr)
+            .await?;
         Ok(get_root_domain_ptr)
     }
 
-    fn create_mono_image_from_data(
+    async fn create_mono_image_from_data(
         &self,
         assembly_to_inject: &[u8],
         root_domain_ptr: usize,
-    ) -> Result<usize, Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    ) -> Result<usize> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let mono_thread_attach_fn = self
@@ -174,7 +209,9 @@ impl Mtga {
             .ok_or("Could not find mono_image_open_from_data()")?;
 
         // params
-        let assembly_data_ptr = memory_manager.allocate_and_write(assembly_to_inject)?;
+        let assembly_data_ptr = memory_manager
+            .allocate_and_write(assembly_to_inject)
+            .await?;
 
         /*
         typedef enum {
@@ -184,12 +221,14 @@ impl Mtga {
                 MONO_IMAGE_IMAGE_INVALID
         } MonoImageOpenStatus;
         */
-
-        let image_open_status_ptr =
-            memory_manager.allocate_and_write(&[0; std::mem::size_of::<u32>()])?;
+        let image_open_status_ptr = memory_manager
+            .allocate_and_write(&[0; std::mem::size_of::<u32>()])
+            .await?;
 
         // out params
-        let ret_val_ptr = memory_manager.allocate_and_write(&[0; std::mem::size_of::<usize>()])?;
+        let ret_val_ptr = memory_manager
+            .allocate_and_write(&[0; std::mem::size_of::<usize>()])
+            .await?;
 
         // assembly
         let mut assembler = Assembler::new();
@@ -205,7 +244,6 @@ impl Mtga {
         MonoImage* mono_image_open_from_data (char *data, uint32_t data_len, mono_bool need_copy,
                                               MonoImageOpenStatus *status);
         */
-
         assembler.mov_rax(mono_image_open_from_data_fn.address().try_into()?);
         assembler.mov_rcx(assembly_data_ptr.try_into()?);
         assembler.mov_rdx(assembly_to_inject.len().try_into()?);
@@ -217,26 +255,30 @@ impl Mtga {
         assembler.ret();
 
         // execute and return
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
 
         let mut open_status_result = 0x0_u32;
-        memory_manager.read_from_address(image_open_status_ptr, &mut open_status_result)?;
+        memory_manager
+            .read_from_address(image_open_status_ptr, &mut open_status_result)
+            .await?;
         if open_status_result != 0 {
             return Err("Could not create image from data!".into());
         }
 
         let mut image_ptr = 0_usize;
-        memory_manager.read_from_address(ret_val_ptr, &mut image_ptr)?;
+        memory_manager
+            .read_from_address(ret_val_ptr, &mut image_ptr)
+            .await?;
         Ok(image_ptr)
     }
 
-    fn create_mono_assembly_from_image(
+    async fn create_mono_assembly_from_image(
         &self,
         root_domain_ptr: usize,
         image_ptr: usize,
-    ) -> Result<usize, Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    ) -> Result<usize> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let mono_thread_attach_fn = self
@@ -253,14 +295,18 @@ impl Mtga {
         let mut assembly_name = String::from("tracker-injector-");
         assembly_name.push_str(utils::Guid::rand().to_string().as_str());
         assembly_name.push('\0');
-        let assembly_name_ptr = memory_manager.allocate_and_write(assembly_name.as_bytes())?;
+        let assembly_name_ptr = memory_manager
+            .allocate_and_write(assembly_name.as_bytes())
+            .await?;
 
         // out params
-        let ret_val_ptr =
-            memory_manager.allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])?;
+        let ret_val_ptr = memory_manager
+            .allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])
+            .await?;
 
-        let open_status_ptr =
-            memory_manager.allocate_and_write(&[0_u8; std::mem::size_of::<u32>()])?;
+        let open_status_ptr = memory_manager
+            .allocate_and_write(&[0_u8; std::mem::size_of::<u32>()])
+            .await?;
 
         let mut assembler = Assembler::new();
         assembler.sub_rsp(0x28);
@@ -286,12 +332,14 @@ impl Mtga {
         assembler.ret();
 
         // execute
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
 
         // check image_open_status and return assembly_pointer
         let mut image_open_status = 0_u32;
-        memory_manager.read_from_address(open_status_ptr, &mut image_open_status)?;
+        memory_manager
+            .read_from_address(open_status_ptr, &mut image_open_status)
+            .await?;
         if image_open_status != 0 {
             return Err(format!(
                 "mono_assembly_load_from() returned with error: {}",
@@ -301,19 +349,21 @@ impl Mtga {
         }
 
         let mut assembly_ptr = 0_usize;
-        memory_manager.read_from_address(ret_val_ptr, &mut assembly_ptr)?;
+        memory_manager
+            .read_from_address(ret_val_ptr, &mut assembly_ptr)
+            .await?;
 
         Ok(assembly_ptr)
     }
 
-    fn get_class_from_image(
+    async fn get_class_from_image(
         &self,
         root_domain_ptr: usize,
         image_ptr: usize,
         namespace: &str,
         class_name: &str,
-    ) -> Result<usize, Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    ) -> Result<usize> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let thread_attach_fn = self
@@ -329,15 +379,16 @@ impl Mtga {
         // params
         let mut namespace = Vec::from(namespace.as_bytes());
         namespace.push(0);
-        let namespace_ptr = memory_manager.allocate_and_write(&namespace)?;
+        let namespace_ptr = memory_manager.allocate_and_write(&namespace).await?;
 
         let mut class_name = Vec::from(class_name.as_bytes());
         class_name.push(0);
-        let class_name_ptr = memory_manager.allocate_and_write(&class_name)?;
+        let class_name_ptr = memory_manager.allocate_and_write(&class_name).await?;
 
         // out params
-        let ret_val_ptr =
-            memory_manager.allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])?;
+        let ret_val_ptr = memory_manager
+            .allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])
+            .await?;
 
         // assembly
         let mut assembler = Assembler::new();
@@ -362,22 +413,24 @@ impl Mtga {
         assembler.ret();
 
         // execute and return
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
 
         let mut mono_class_ptr = 0_usize;
-        memory_manager.read_from_address(ret_val_ptr, &mut mono_class_ptr)?;
+        memory_manager
+            .read_from_address(ret_val_ptr, &mut mono_class_ptr)
+            .await?;
         Ok(mono_class_ptr)
     }
 
-    fn get_method_from_class(
+    async fn get_method_from_class(
         &self,
         root_domain_ptr: usize,
         class_ptr: usize,
         method_name: &str,
         num_params: u64,
-    ) -> Result<usize, Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    ) -> Result<usize> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let mono_thread_attach_fn = self
@@ -393,11 +446,12 @@ impl Mtga {
         // params
         let mut method_name = Vec::from(method_name.as_bytes());
         method_name.push(0);
-        let method_name_ptr = memory_manager.allocate_and_write(&method_name)?;
+        let method_name_ptr = memory_manager.allocate_and_write(&method_name).await?;
 
         // out params
-        let ret_val_ptr =
-            memory_manager.allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])?;
+        let ret_val_ptr = memory_manager
+            .allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])
+            .await?;
 
         // assembly
         let mut assembler = Assembler::new();
@@ -423,22 +477,24 @@ impl Mtga {
         assembler.ret();
 
         // execute and return
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
 
         let mut method_ptr = 0_usize;
-        memory_manager.read_from_address(ret_val_ptr, &mut method_ptr)?;
+        memory_manager
+            .read_from_address(ret_val_ptr, &mut method_ptr)
+            .await?;
 
         Ok(method_ptr)
     }
 
-    fn runtime_invoke(
+    async fn runtime_invoke(
         &self,
         root_domain_ptr: usize,
         method_ptr: usize,
         params_ptr: Option<usize>,
-    ) -> Result<(), Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    ) -> Result<()> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let mono_thread_attach_fn = self
@@ -452,8 +508,9 @@ impl Mtga {
             .ok_or("Could not find mono_runtime_invoke()")?;
 
         // params
-        let exception_object_ptr =
-            memory_manager.allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])?;
+        let exception_object_ptr = memory_manager
+            .allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])
+            .await?;
 
         // assembly
         let mut assembler = Assembler::new();
@@ -479,12 +536,14 @@ impl Mtga {
         assembler.ret();
 
         // execute and return
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
 
         let mut exception_object = 0_usize;
         // check for exceptions
-        memory_manager.read_from_address(exception_object_ptr, &mut exception_object)?;
+        memory_manager
+            .read_from_address(exception_object_ptr, &mut exception_object)
+            .await?;
 
         if exception_object != 0 {
             Err("Runtime invocation failed with an exception!".into())
@@ -493,12 +552,12 @@ impl Mtga {
         }
     }
 
-    fn get_image_from_assembly(
+    async fn get_image_from_assembly(
         &self,
         root_domain_ptr: usize,
         assembly_ptr: usize,
-    ) -> Result<usize, Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    ) -> Result<usize> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let mono_thread_attach_fn = self
@@ -512,8 +571,9 @@ impl Mtga {
             .ok_or("Could not find mono_assembly_get_image()")?;
 
         // out params
-        let ret_val_ptr =
-            memory_manager.allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])?;
+        let ret_val_ptr = memory_manager
+            .allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])
+            .await?;
 
         // assembly
         let mut assembler = Assembler::new();
@@ -537,21 +597,19 @@ impl Mtga {
         assembler.ret();
 
         // execute and return
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
 
         let mut image_ptr = 0_usize;
-        memory_manager.read_from_address(ret_val_ptr, &mut image_ptr)?;
+        memory_manager
+            .read_from_address(ret_val_ptr, &mut image_ptr)
+            .await?;
 
         Ok(image_ptr)
     }
 
-    fn close_load_image(
-        &self,
-        root_domain_ptr: usize,
-        load_image_ptr: usize,
-    ) -> Result<(), Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    async fn close_load_image(&self, root_domain_ptr: usize, load_image_ptr: usize) -> Result<()> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let mono_thread_attach_fn = self
@@ -584,13 +642,13 @@ impl Mtga {
         assembler.ret();
 
         // execute and return
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
         Ok(())
     }
 
-    fn create_mono_string(&self, root_domain_ptr: usize, s: &str) -> Result<usize, Box<dyn Error>> {
-        let memory_manager = self.process.get_memory_manager()?;
+    async fn create_mono_string(&self, root_domain_ptr: usize, s: &str) -> Result<usize> {
+        let memory_manager = self.process.get_memory_manager().await?;
 
         // functions
         let mono_thread_attach_fn = self
@@ -605,10 +663,12 @@ impl Mtga {
 
         // params
         let s = Vec::from(s.as_bytes());
-        let s_ptr = memory_manager.allocate_and_write(&s)?;
+        let s_ptr = memory_manager.allocate_and_write(&s).await?;
 
         // output
-        let ret_val = memory_manager.allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])?;
+        let ret_val = memory_manager
+            .allocate_and_write(&[0_u8; std::mem::size_of::<usize>()])
+            .await?;
 
         // assembly
         let mut assembler = Assembler::new();
@@ -633,16 +693,18 @@ impl Mtga {
         assembler.ret();
 
         // execute and return
-        let code_ptr = memory_manager.allocate_and_write(assembler.data())?;
-        self.process.execute(code_ptr)?;
+        let code_ptr = memory_manager.allocate_and_write(assembler.data()).await?;
+        self.process.execute(code_ptr).await?;
 
         let mut string_ptr = 0_usize;
-        memory_manager.read_from_address(ret_val, &mut string_ptr)?;
+        memory_manager
+            .read_from_address(ret_val, &mut string_ptr)
+            .await?;
         Ok(string_ptr)
     }
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 enum RequiredFunction {
     MonoGetRootDomain,
     MonoThreadAttach,
@@ -659,7 +721,7 @@ enum RequiredFunction {
 impl TryFrom<&str> for RequiredFunction {
     type Error = &'static str;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "mono_get_root_domain" => Ok(RequiredFunction::MonoGetRootDomain),
             "mono_thread_attach" => Ok(RequiredFunction::MonoThreadAttach),

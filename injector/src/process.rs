@@ -1,9 +1,14 @@
 use crate::utils;
-use std::cell::{Ref, RefCell};
-use std::error::Error;
+use crate::Result;
+
+use async_std::stream::Stream;
+use async_std::sync::Mutex;
+use futures::future::join_all;
 use std::ffi::c_void;
 use std::ops::Deref;
-use std::rc::Rc;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 
 #[cfg(windows)]
 extern crate windows;
@@ -32,10 +37,10 @@ pub(crate) struct Processes {
 }
 
 #[cfg(windows)]
-impl Iterator for Processes {
+impl Stream for Processes {
     type Item = Process;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         use windows::Win32::System::Diagnostics::ToolHelp::{
             Process32FirstW, Process32NextW, PROCESSENTRY32W,
         };
@@ -55,14 +60,14 @@ impl Iterator for Processes {
                 );
             }
             if !ret.as_bool() {
-                None
+                Poll::Ready(None)
             } else {
-                Some(Process {
+                Poll::Ready(Some(Process {
                     id: process_entry.th32ProcessID,
                     name: utils::get_process_name(&process_entry.szExeFile),
-                    process_handle: RefCell::new(None),
-                    memory_manager: RefCell::new(None),
-                })
+                    process_handle: Mutex::new(None),
+                    memory_manager: Mutex::new(None),
+                }))
             }
         } else {
             let ret;
@@ -73,14 +78,14 @@ impl Iterator for Processes {
                 );
             }
             if !ret.as_bool() {
-                None
+                Poll::Ready(None)
             } else {
-                Some(Process {
+                Poll::Ready(Some(Process {
                     id: process_entry.th32ProcessID,
                     name: utils::get_process_name(&process_entry.szExeFile),
-                    process_handle: RefCell::new(None),
-                    memory_manager: RefCell::new(None),
-                })
+                    process_handle: Mutex::new(None),
+                    memory_manager: Mutex::new(None),
+                }))
             }
         }
     }
@@ -89,8 +94,8 @@ impl Iterator for Processes {
 pub(crate) struct Process {
     id: u32,
     name: String,
-    process_handle: RefCell<Option<Rc<HandleWrapper>>>,
-    memory_manager: RefCell<Option<MemoryManager>>,
+    process_handle: Mutex<Option<Arc<HandleWrapper>>>,
+    memory_manager: Mutex<Option<Arc<MemoryManager>>>,
 }
 
 impl Process {
@@ -124,21 +129,19 @@ impl Process {
     /// This method uses a lazy pattern so if you never call the `get_process_handle()` function,
     /// `Process` will not have an open process handle.
     #[cfg(windows)]
-    fn get_process_handle(&self) -> Result<Rc<HandleWrapper>, Box<dyn Error>> {
+    async fn get_process_handle(&self) -> Result<Arc<HandleWrapper>> {
         use windows::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
         let handle;
         unsafe {
             handle = OpenProcess(PROCESS_ALL_ACCESS, false, self.id)?;
         }
 
-        if self.process_handle.borrow().is_none() {
-            *self.process_handle.borrow_mut() = Some(Rc::new(HandleWrapper { handle }));
+        let mut process_handle = self.process_handle.lock().await;
+        if process_handle.is_none() {
+            *process_handle = Some(Arc::new(HandleWrapper { handle }));
         }
 
-        Ok(Rc::clone(&Ref::map(
-            self.process_handle.borrow(),
-            |process_handle| process_handle.as_ref().unwrap(),
-        )))
+        Ok(Arc::clone(process_handle.as_ref().unwrap()))
     }
 
     /// Returns a memory manager to the process, used to read and write into the process memory.
@@ -146,45 +149,48 @@ impl Process {
     /// Since `MemoryManager` needs a handle to the process, the function will call `get_process_handle()`,
     /// opening a process handle to the process.
     #[cfg(windows)]
-    pub(crate) fn get_memory_manager(
-        &self,
-    ) -> Result<impl Deref<Target = MemoryManager> + '_, Box<dyn Error>> {
-        if (*self.memory_manager.borrow()).is_none() {
-            let memory_manager = MemoryManager::new(self.get_process_handle()?);
-            *self.memory_manager.borrow_mut() = Some(memory_manager);
+    pub(crate) async fn get_memory_manager(&self) -> Result<Arc<MemoryManager>> {
+        let mut memory_manager = self.memory_manager.lock().await;
+        if memory_manager.is_none() {
+            let process_handle = self.get_process_handle().await?;
+            *memory_manager = Some(Arc::new(MemoryManager::new(process_handle)));
         }
 
-        Ok(Ref::map(self.memory_manager.borrow(), |memory_manager| {
-            memory_manager.as_ref().unwrap()
-        }))
+        Ok(Arc::clone(memory_manager.as_ref().unwrap()))
     }
 
     /// Returns the exported functions for a module in the process
     ///
     /// Since it uses `MemoryManager`, the function has to get a process handle with PROCESS_ALL_ACCESS rights.
     #[cfg(windows)]
-    pub(crate) fn get_exports_for_module(
+    pub(crate) async fn get_exports_for_module(
         &self,
         module: &Module,
-    ) -> Result<Vec<ExportedFunction>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<ExportedFunction>> {
         use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
         use windows::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY};
 
-        let memory_manager = self.get_memory_manager()?;
+        let memory_manager = self.get_memory_manager().await?;
 
         let mut dos_header = IMAGE_DOS_HEADER::default();
-        memory_manager.read_from_address(module.load_address, &mut dos_header)?;
+        memory_manager
+            .read_from_address(module.load_address, &mut dos_header)
+            .await?;
 
         let mut nt_headers = IMAGE_NT_HEADERS64::default();
         let nt_headers_address = module.load_address + dos_header.e_lfanew as usize;
 
-        memory_manager.read_from_address(nt_headers_address, &mut nt_headers)?;
+        memory_manager
+            .read_from_address(nt_headers_address, &mut nt_headers)
+            .await?;
 
         let exports_table_address = module.load_address
             + nt_headers.OptionalHeader.DataDirectory[0].VirtualAddress as usize;
 
         let mut exports = IMAGE_EXPORT_DIRECTORY::default();
-        memory_manager.read_from_address(exports_table_address, &mut exports)?;
+        memory_manager
+            .read_from_address(exports_table_address, &mut exports)
+            .await?;
 
         let base = exports.Base as u16;
         let functions_address = module.load_address + exports.AddressOfFunctions as usize;
@@ -192,41 +198,47 @@ impl Process {
         let names_ordinals_map_address =
             module.load_address + exports.AddressOfNameOrdinals as usize;
 
-        let exported_functions = (0..exports.NumberOfNames as usize)
-            .into_iter()
-            .map(|i| {
+        let exported_functions = (0..exports.NumberOfNames as usize).into_iter().map(|i| {
+            let memory_manager_iter = Arc::clone(&memory_manager);
+            async move {
                 let function_name_addr = names_address + i * 4;
                 let function_name_ordinal_map_address = names_ordinals_map_address + i * 2;
                 let mut function_name_rva: u32 = 0;
-                memory_manager.read_from_address(function_name_addr, &mut function_name_rva)?;
+                memory_manager_iter
+                    .read_from_address(function_name_addr, &mut function_name_rva)
+                    .await?;
 
-                let function_name = memory_manager
-                    .read_string_from_char_ptr(module.load_address + function_name_rva as usize)?;
+                let function_name = memory_manager_iter
+                    .read_string_from_char_ptr(module.load_address + function_name_rva as usize)
+                    .await?;
 
                 let mut function_ordinal = 0_u16;
-                memory_manager
-                    .read_from_address(function_name_ordinal_map_address, &mut function_ordinal)?;
+                memory_manager_iter
+                    .read_from_address(function_name_ordinal_map_address, &mut function_ordinal)
+                    .await?;
 
                 let mut function_address_rva = 0_u32;
-                memory_manager.read_from_address(
-                    functions_address + function_ordinal as usize * 4,
-                    &mut function_address_rva,
-                )?;
+                memory_manager_iter
+                    .read_from_address(
+                        functions_address + function_ordinal as usize * 4,
+                        &mut function_address_rva,
+                    )
+                    .await?;
                 let function_address = module.load_address + function_address_rva as usize;
 
-                Ok(ExportedFunction {
+                Ok::<ExportedFunction, Box<dyn std::error::Error + Send + Sync>>(ExportedFunction {
                     ordinal: (function_ordinal + base) as u32,
                     name: function_name,
                     address: function_address,
                 })
-            })
-            .collect::<Result<Vec<ExportedFunction>, Box<dyn Error>>>();
+            }
+        });
 
-        exported_functions
+        join_all(exported_functions).await.into_iter().collect()
     }
 
-    pub(crate) fn execute(&self, start_address: usize) -> Result<(), Box<dyn std::error::Error>> {
-        use windows::Win32::Foundation::{WAIT_OBJECT_0, WIN32_ERROR};
+    pub(crate) async fn execute(&self, start_address: usize) -> Result<()> {
+        use windows::Win32::Foundation::WAIT_OBJECT_0;
         use windows::Win32::System::Threading::CreateRemoteThread;
         use windows::Win32::System::Threading::WaitForSingleObject;
         use windows::Win32::System::WindowsProgramming::INFINITE;
@@ -235,20 +247,12 @@ impl Process {
             let start_address =
                 std::mem::transmute::<usize, extern "system" fn(*mut c_void) -> u32>(start_address);
 
-            let mut thread_id = 0_u32;
-            let thread_handle: HandleWrapper = CreateRemoteThread(
-                self.get_process_handle()?.handle,
-                std::ptr::null(),
-                0,
-                Some(start_address),
-                std::ptr::null(),
-                0,
-                &mut thread_id as *mut u32,
-            )?
-            .into();
+            let handle = self.get_process_handle().await?.handle;
+            let thread_handle: HandleWrapper =
+                CreateRemoteThread(handle, None, 0, Some(start_address), None, 0, None)?.into();
 
             let result = WaitForSingleObject(*thread_handle, INFINITE);
-            if WIN32_ERROR(result) != WAIT_OBJECT_0 {
+            if result != WAIT_OBJECT_0 {
                 Err("Waiting on the created thread failed".into())
             } else {
                 Ok(())
@@ -264,10 +268,10 @@ pub(crate) struct Modules {
 }
 
 #[cfg(windows)]
-impl Iterator for Modules {
+impl Stream for Modules {
     type Item = Module;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         use windows::Win32::System::Diagnostics::ToolHelp::{
             Module32FirstW, Module32NextW, MODULEENTRY32W,
         };
@@ -287,12 +291,12 @@ impl Iterator for Modules {
                 );
             }
             if !ret.as_bool() {
-                None
+                Poll::Ready(None)
             } else {
-                Some(Module {
+                Poll::Ready(Some(Module {
                     name: utils::get_module_name(&module_entry.szModule),
                     load_address: module_entry.modBaseAddr as usize,
-                })
+                }))
             }
         } else {
             let ret;
@@ -303,12 +307,12 @@ impl Iterator for Modules {
                 );
             }
             if !ret.as_bool() {
-                None
+                Poll::Ready(None)
             } else {
-                Some(Module {
+                Poll::Ready(Some(Module {
                     name: utils::get_module_name(&module_entry.szModule),
                     load_address: module_entry.modBaseAddr as usize,
-                })
+                }))
             }
         }
     }
@@ -327,9 +331,9 @@ impl Module {
 
 #[cfg(windows)]
 pub(crate) struct MemoryManager {
-    process_handle: Rc<HandleWrapper>,
+    process_handle: Arc<HandleWrapper>,
     /// Addresses and sizes of the allocations
-    allocations: RefCell<
+    allocations: Mutex<
         Vec<(
             usize, /* allocation_address */
             usize, /* allocation_size */
@@ -339,31 +343,27 @@ pub(crate) struct MemoryManager {
 
 #[cfg(windows)]
 impl MemoryManager {
-    pub(crate) fn new(process_handle: Rc<HandleWrapper>) -> MemoryManager {
+    pub(crate) fn new(process_handle: Arc<HandleWrapper>) -> MemoryManager {
         MemoryManager {
             process_handle,
-            allocations: RefCell::new(vec![]),
+            allocations: Mutex::new(vec![]),
         }
     }
 
-    pub(crate) fn read_from_address<T>(
-        &self,
-        address: usize,
-        buffer: &mut T,
-    ) -> Result<(), Box<dyn Error>> {
+    pub(crate) async fn read_from_address<T>(&self, address: usize, buffer: &mut T) -> Result<()> {
         use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 
-        let mut bytes_read = 0_usize;
-        assert!(!self.process_handle.handle.is_invalid());
+        let handle = self.process_handle.handle;
+        assert!(!handle.is_invalid());
 
         let ret;
         unsafe {
             ret = ReadProcessMemory(
-                self.process_handle.handle,
+                handle,
                 address as *const c_void,
                 buffer as *mut T as *mut c_void,
                 std::mem::size_of::<T>(),
-                &mut bytes_read as *mut usize,
+                None,
             );
         }
         if !ret.as_bool() {
@@ -373,61 +373,53 @@ impl MemoryManager {
         }
     }
 
-    pub(crate) fn allocate_and_write(&self, data: &[u8]) -> Result<usize, Box<dyn Error>> {
+    pub(crate) async fn allocate_and_write(&self, data: &[u8]) -> Result<usize> {
         use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
         use windows::Win32::System::Memory::VirtualAllocEx;
         use windows::Win32::System::Memory::{MEM_COMMIT, PAGE_EXECUTE_READWRITE};
 
-        assert!(!self.process_handle.handle.is_invalid());
+        let handle = self.process_handle.handle;
 
-        let allocated_address;
-        unsafe {
-            allocated_address = VirtualAllocEx(
-                self.process_handle.handle,
-                std::ptr::null_mut(),
-                data.len(),
-                MEM_COMMIT,
-                PAGE_EXECUTE_READWRITE,
-            );
-        }
+        assert!(!handle.is_invalid());
 
-        if allocated_address.is_null() {
-            return Err(Box::new(std::io::Error::last_os_error()));
-        }
-        self.allocations
-            .borrow_mut()
-            .push((allocated_address as usize, data.len()));
+        let allocated_address = unsafe {
+            let allocated_address =
+                VirtualAllocEx(handle, None, data.len(), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 
-        let mut bytes_written = 0_usize;
-        let ret;
-        unsafe {
+            if allocated_address.is_null() {
+                return Err(Box::new(std::io::Error::last_os_error()));
+            }
+
+            let ret;
             ret = WriteProcessMemory(
-                self.process_handle.handle,
+                handle,
                 allocated_address,
                 data.as_ptr() as *const c_void,
                 data.len(),
-                &mut bytes_written as *mut usize,
+                None,
             );
-        }
 
-        if !ret.as_bool() {
-            return Err(Box::new(std::io::Error::last_os_error()));
-        }
+            if !ret.as_bool() {
+                return Err(Box::new(std::io::Error::last_os_error()));
+            }
 
-        Ok(allocated_address as usize)
+            allocated_address as usize
+        };
+
+        let mut allocations = self.allocations.lock().await;
+        (*allocations).push((allocated_address, data.len()));
+        Ok(allocated_address)
     }
 
-    pub(crate) fn read_string_from_char_ptr(
-        &self,
-        address: usize,
-    ) -> Result<String, Box<dyn Error>> {
+    pub(crate) async fn read_string_from_char_ptr(&self, address: usize) -> Result<String> {
         let mut s: Vec<u8> = vec![];
         let mut read_terminator = false;
         let mut offset = 0_usize;
         let mut buffer = [0_u8; std::mem::size_of::<usize>()];
 
         loop {
-            self.read_from_address(address + offset, &mut buffer)?;
+            self.read_from_address(address + offset, &mut buffer)
+                .await?;
 
             s.extend(buffer.iter().take_while(|&&c| {
                 if c == 0 {
@@ -450,26 +442,25 @@ impl MemoryManager {
 
 impl Drop for MemoryManager {
     fn drop(&mut self) {
-        use windows::Win32::System::Memory::VirtualFreeEx;
-        use windows::Win32::System::Memory::MEM_DECOMMIT;
+        async_std::task::block_on(async {
+            use windows::Win32::System::Memory::VirtualFreeEx;
+            use windows::Win32::System::Memory::MEM_DECOMMIT;
 
-        for allocation in &*self.allocations.borrow() {
-            assert!(!self.process_handle.handle.is_invalid());
-            let allocation_address = (allocation.0) as *mut c_void;
-            let allocation_size = allocation.1;
-            let ret;
-            unsafe {
-                ret = VirtualFreeEx(
-                    self.process_handle.handle,
-                    allocation_address,
-                    allocation_size,
-                    MEM_DECOMMIT,
-                );
+            let allocations = self.allocations.lock().await;
+            for allocation in allocations.iter() {
+                let handle = self.process_handle.handle;
+                assert!(!handle.is_invalid());
+                let allocation_address = (allocation.0) as *mut c_void;
+                let allocation_size = allocation.1;
+                let ret;
+                unsafe {
+                    ret = VirtualFreeEx(handle, allocation_address, allocation_size, MEM_DECOMMIT);
+                }
+                if !ret.as_bool() {
+                    panic!("Uh oh something went wrong and we are leaking");
+                }
             }
-            if !ret.as_bool() {
-                panic!("Uh oh something went wrong and we are leaking");
-            }
-        }
+        });
     }
 }
 

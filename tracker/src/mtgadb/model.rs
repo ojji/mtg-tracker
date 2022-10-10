@@ -1,11 +1,13 @@
 //! The main model types are `AccountInfoEvent`, `InventoryUpdateEvent` and `CollectionEvent`, appearing as the main JSON objects in the
 //! log file. Every main model type has a `Timestamp` and an `Attachment` field, describing when the event occured and
 //! containing the detailed event object.
-
-use std::{collections::HashMap, error::Error, fmt::Display};
+use crate::Result;
+use std::collections::HashMap;
+use std::fmt::Display;
+use std::hash::Hash;
 
 use rusqlite::{types::FromSql, Connection, ToSql};
-use serde::{Deserialize, Serialize};
+use serde::{de::Visitor, Deserialize, Serialize};
 
 /// # Card Objects
 /// Card objects represent individual Magic: The Gathering cards that players could obtain and add to their collection
@@ -581,7 +583,7 @@ pub struct ScryCardFace {
     pub watermark: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash)]
 pub struct Guid(String);
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -623,75 +625,229 @@ pub struct Legality(String);
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Date(String);
 
-/*
-
-[MTGADataCollector][inventory]
-{
-  "Timestamp": "2022-09-11T16:28:55.8865732+02:00",
-  "Attachment": {
-    "wcCommon": 38,
-    "wcUncommon": 71,
-    "wcRare": 45,
-    "wcMythic": 30,
-    "gold": 793775,
-    "gems": 25080,
-    "wcTrackPosition": 0,
-    "vaultProgress": 27.1,
-    "boosters": [
-      {
-        "collationId": 100023,
-        "count": 65
-      },
-      {
-        "collationId": 100024,
-        "count": 51
-      },
-      {
-        "collationId": 100025,
-        "count": 50
-      },
-      {
-        "collationId": 100026,
-        "count": 58
-      },
-      {
-        "collationId": 400026,
-        "count": 9
-      },
-      {
-        "collationId": 100027,
-        "count": 53
-      },
-      {
-        "collationId": 100028,
-        "count": 40
-      },
-      {
-        "collationId": 400028,
-        "count": 6
-      },
-      {
-        "collationId": 100029,
-        "count": 37
-      },
-      {
-        "collationId": 100030,
-        "count": 15
-      }
-    ],
-    "vouchers": [],
-    "basicLandSet": null,
-    "latestBasicLandSet": null,
-    "starterDecks": null,
-    "tickets": null,
-    "CustomTokens": {
-      "DraftToken": 19
-    },
-    "draftTokens": 19,
-    "sealedTokens": 0
-  }
+/// `InventoryEvent` is the outermost json object describing the player inventory parsed from the MTGA log file.
+///
+/// Example object in the json body:
+/// ```
+/// {
+///   "Timestamp": "2022-09-11T16:28:55.8865732+02:00",
+///   "Attachment": {
+///     "wcCommon": 38,
+///     "wcUncommon": 71,
+///     "wcRare": 45,
+///     "wcMythic": 30,
+///     "gold": 793775,
+///     "gems": 25080,
+///     "wcTrackPosition": 0,
+///     "vaultProgress": 27.1,
+///     "boosters": [
+///       {
+///         "collationId": 100023,
+///         "count": 65
+///       },
+///       {
+///         "collationId": 100024,
+///         "count": 51
+///       },
+///       {
+///         "collationId": 100025,
+///         "count": 50
+///       },
+///       {
+///         "collationId": 100026,
+///         "count": 58
+///       },
+///       {
+///         "collationId": 400026,
+///         "count": 9
+///       },
+///       {
+///         "collationId": 100027,
+///         "count": 53
+///       },
+///       {
+///         "collationId": 100028,
+///         "count": 40
+///       },
+///       {
+///         "collationId": 400028,
+///         "count": 6
+///       },
+///       {
+///         "collationId": 100029,
+///         "count": 37
+///       },
+///       {
+///         "collationId": 100030,
+///         "count": 15
+///       }
+///     ],
+///     "vouchers": [],
+///     "basicLandSet": null,
+///     "latestBasicLandSet": null,
+///     "starterDecks": null,
+///     "tickets": null,
+///     "CustomTokens": {
+///       "DraftToken": 19
+///     },
+///     "draftTokens": 19,
+///     "sealedTokens": 0
+///   }
+/// }
+/// ```
+#[derive(Debug, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "PascalCase")]
+pub struct InventoryEvent {
+    pub timestamp: String,
+    pub attachment: PlayerInventoryData,
 }
-*/
+
+/// `PlayerInventoryData` contains what the player has in their inventory - wildcards, booster packs, draft tokens etc.
+///
+/// Example object in the json body:
+/// ```
+/// {
+///   "wcCommon": 38,
+///   "wcUncommon": 71,
+///   "wcRare": 45,
+///   "wcMythic": 30,
+///   "gold": 793775,
+///   "gems": 25080,
+///   "wcTrackPosition": 0,
+///   "vaultProgress": 27.1,
+///   "boosters": [
+///     {
+///       "collationId": 100023,
+///       "count": 65
+///     },
+///     {
+///       "collationId": 100024,
+///       "count": 51
+///     },
+///     {
+///       "collationId": 100025,
+///       "count": 50
+///     },
+///     {
+///       "collationId": 100026,
+///       "count": 58
+///     },
+///     {
+///       "collationId": 400026,
+///       "count": 9
+///     },
+///     {
+///       "collationId": 100027,
+///       "count": 53
+///     },
+///     {
+///       "collationId": 100028,
+///       "count": 40
+///     },
+///     {
+///       "collationId": 400028,
+///       "count": 6
+///     },
+///     {
+///       "collationId": 100029,
+///       "count": 37
+///     },
+///     {
+///       "collationId": 100030,
+///       "count": 15
+///     }
+///   ],
+///   "vouchers": [],
+///   "basicLandSet": null,
+///   "latestBasicLandSet": null,
+///   "starterDecks": null,
+///   "tickets": null,
+///   "CustomTokens": {
+///     "DraftToken": 19
+///   },
+///   "draftTokens": 19,
+///   "sealedTokens": 0
+/// }
+/// ```
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerInventoryData {
+    pub wc_common: u32,
+    pub wc_uncommon: u32,
+    pub wc_rare: u32,
+    pub wc_mythic: u32,
+    pub gold: u32,
+    pub gems: u32,
+    pub wc_track_position: i32,
+    pub vault_progress: HashableF64,
+    pub boosters: Vec<BoosterStack>,
+    pub vouchers: Vec<ClientVoucherDescription>,
+    pub basic_land_set: Option<String>,
+    pub latest_basic_land_set: Option<String>,
+    pub starter_decks: Option<Vec<Guid>>,
+    pub tickets: Option<Vec<TicketStack>>,
+    pub custom_tokens: Option<HashMap<String, u32>>,
+}
+
+impl Hash for PlayerInventoryData {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.wc_common.hash(state);
+        self.wc_uncommon.hash(state);
+        self.wc_rare.hash(state);
+        self.wc_mythic.hash(state);
+        self.gold.hash(state);
+        self.gems.hash(state);
+        self.wc_track_position.hash(state);
+        self.vault_progress.hash(state);
+        self.boosters.hash(state);
+        self.vouchers.hash(state);
+        self.basic_land_set.hash(state);
+        self.latest_basic_land_set.hash(state);
+        self.starter_decks.hash(state);
+        self.tickets.hash(state);
+        if self.custom_tokens.is_some() {
+            for (key, value) in self.custom_tokens.as_ref().unwrap().iter() {
+                key.hash(state);
+                value.hash(state);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientVoucherDescription {
+    pub image1: String,
+    pub image2: String,
+    pub image3: String,
+    pub prefab: String,
+    pub reference_id: String,
+    pub header_loc_key: String,
+    pub description_loc_key: String,
+    pub quantity: String,
+    pub loc_params: Option<HashMap<String, i32>>,
+    pub available_date: String,
+}
+
+impl Hash for ClientVoucherDescription {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.image1.hash(state);
+        self.image2.hash(state);
+        self.image3.hash(state);
+        self.prefab.hash(state);
+        self.reference_id.hash(state);
+        self.header_loc_key.hash(state);
+        self.description_loc_key.hash(state);
+        self.quantity.hash(state);
+        if self.loc_params.is_some() {
+            for (key, value) in self.loc_params.as_ref().unwrap().iter() {
+                key.hash(state);
+                value.hash(state);
+            }
+        }
+        self.available_date.hash(state);
+    }
+}
 
 /// `InventoryUpdateEvent` is the outermost json object describing an inventory update event parsed from the log file.
 ///
@@ -731,14 +887,14 @@ pub struct Date(String);
 ///   }
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "PascalCase")]
 pub struct InventoryUpdateEvent {
     pub timestamp: String,
-    pub attachment: ClientInventoryUpdateReportItem,
+    pub attachment: InventoryUpdateData,
 }
 
-/// `ClientInventoryUpdateReportItem` is emitted when an update happens to the player inventory eg. when a match ends.
+/// `InventoryUpdateData` is emitted when an update happens to the player inventory eg. when a match ends.
 /// It contains a delta of gems, xp, cards of the player inventory and it's source.
 ///
 /// Example attachment in the event body:
@@ -794,19 +950,13 @@ pub struct InventoryUpdateEvent {
 ///   "parentcontext": null
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ClientInventoryUpdateReportItem {
+#[derive(Debug, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryUpdateData {
     delta: InventoryDelta,
-
-    #[serde(rename = "aetherizedCards")]
     aetherized_cards: Vec<AetherizedCardInformation>,
-
-    #[serde(rename = "xpGained")]
     xp_gained: i32,
-
     context: InventoryUpdateContext,
-
-    #[serde(rename = "parentcontext")]
     parent_context: Option<String>,
 }
 
@@ -847,62 +997,27 @@ pub struct ClientInventoryUpdateReportItem {
 ///   ]
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct InventoryDelta {
-    #[serde(rename = "gemsDelta")]
     pub gems_delta: i32,
-
-    #[serde(rename = "goldDelta")]
     pub gold_delta: i32,
-
-    #[serde(rename = "boosterDelta")]
     pub booster_delta: Vec<BoosterStack>,
-
-    #[serde(rename = "cardsAdded")]
     pub cards_added: Vec<u32>,
-
-    #[serde(rename = "decksAdded")]
     pub decks_added: Vec<Guid>,
-
-    #[serde(rename = "starterDecksAdded")]
     pub starter_decks_added: Option<Vec<Guid>>,
-
-    #[serde(rename = "vanityItemsAdded")]
     pub vanity_items_added: Vec<String>,
-
-    #[serde(rename = "vanityItemsRemoved")]
     pub vanity_items_removed: Option<Vec<String>>,
-
-    #[serde(rename = "vaultProgressDelta")]
-    pub vault_progress_delta: f32,
-
-    #[serde(rename = "wcTrackPosition")]
+    pub vault_progress_delta: HashableF64,
     pub wc_track_position: i32,
-
-    #[serde(rename = "wcCommonDelta")]
     pub wc_common_delta: i32,
-
-    #[serde(rename = "wcUncommonDelta")]
     pub wc_uncommon_delta: i32,
-
-    #[serde(rename = "wcRareDelta")]
     pub wc_rare_delta: i32,
-
-    #[serde(rename = "wcMythicDelta")]
     pub wc_mythic_delta: i32,
-
-    #[serde(rename = "artSkinsAdded")]
     pub art_skins_added: Vec<ArtSkin>,
-
-    #[serde(rename = "artSkinsRemoved")]
     pub art_skins_removed: Option<Vec<ArtSkin>>,
-
     pub tickets: Option<Vec<TicketStack>>,
-
-    #[serde(rename = "customTokenDelta")]
     custom_token_delta: Vec<CustomTokenDeltaInfo>,
-
-    #[serde(rename = "voucherItemsDelta")]
     voucher_items_delta: Option<Vec<VoucherStack>>,
 }
 
@@ -920,26 +1035,15 @@ pub struct InventoryDelta {
 ///   "set": "DMU"
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct AetherizedCardInformation {
-    #[serde(rename = "grpId")]
     pub grp_id: u32,
-
-    #[serde(rename = "addedToInventory")]
     pub added_to_inventory: bool,
-
-    #[serde(rename = "isGrantedFromDeck")]
     pub is_granted_from_deck: bool,
-
-    #[serde(rename = "vaultProgress")]
-    pub vault_progress: f32,
-
-    #[serde(rename = "goldAwarded")]
+    pub vault_progress: HashableF64,
     pub gold_awarded: i32,
-
-    #[serde(rename = "gemsAwarded")]
     pub gems_awarded: i32,
-
     pub set: String,
 }
 
@@ -966,11 +1070,10 @@ pub struct AetherizedCardInformation {
 /// `CustomerSupportGrant`, `EntryReward`, `EventGrantCardPool`, `CampaignGraphPayoutNode`,
 /// `CampaignGraphAutomaticPayoutNode`, `CampaignGraphPurchaseNode`, `CampaignGraphTieredRewardNode`,
 /// `AccumulativePayoutNode`, `Letter`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct InventoryUpdateContext {
     pub source: String,
-
-    #[serde(rename = "sourceId")]
     pub source_id: Option<String>,
 }
 
@@ -983,23 +1086,22 @@ pub struct InventoryUpdateContext {
 ///   "ccv": "DA"
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct ArtSkin {
-    #[serde(rename = "artId")]
     pub art_id: u32,
-
     pub ccv: String,
 }
 
 /// `TicketStack` describes a new ticket added or removed in an inventory update event.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
 pub struct TicketStack {
     pub ticket: String,
     pub count: i32,
 }
 
 /// `VoucherStack` describes a new voucher added or removed in an inventory update event.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
 pub struct VoucherStack {
     #[serde(rename = "Id")]
     pub id: Guid,
@@ -1016,7 +1118,7 @@ pub struct VoucherStack {
 ///   "delta": 1
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
 pub struct CustomTokenDeltaInfo {
     pub id: String,
     pub delta: i32,
@@ -1031,9 +1133,9 @@ pub struct CustomTokenDeltaInfo {
 ///   "count": 1
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct BoosterStack {
-    #[serde(rename = "collationId")]
     pub collation_id: i32,
     pub count: i32,
 }
@@ -1105,9 +1207,17 @@ impl BoosterStack {
             300004 => String::from("mixedup_1"),
             300005 => String::from("mixedup_2"),
             300006 => String::from("mixedup_3"),
+            300007 => String::from("creaturecube"),
+            400000 => String::from("alchemy"),
             400026 => String::from("y22_mid"),
             400027 => String::from("y22_neo"),
             400028 => String::from("y22_snc"),
+            400030 => String::from("y23_dmu"),
+            500000 => String::from("mythic"),
+            500015 => String::from("eld_mythic"),
+            500016 => String::from("thb_mythic"),
+            500017 => String::from("iko_mythic"),
+            500018 => String::from("m21_mythic"),
             500020 => String::from("znr_mythic"),
             500022 => String::from("khm_mythic"),
             500023 => String::from("stx_mythic"),
@@ -1118,6 +1228,8 @@ impl BoosterStack {
             500028 => String::from("snc_mythic"),
             500029 => String::from("hbg_mythic"),
             500030 => String::from("dmu_mythic"),
+            700028 => String::from("snc_rebalanced"),
+            999999 => String::from("futuresetplaceholder"),
             _ => String::from("unknown"),
         }
     }
@@ -1130,11 +1242,11 @@ pub struct CollectionEvent {
     pub attachment: Vec<CollectedCard>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct CollectedCard {
     pub grp_id: u32,
-    pub count: i32,
+    pub count: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1213,6 +1325,7 @@ pub struct TrackerCard {
     image_uri: Uri,
     rarity: String,
     in_booster: bool,
+    is_alchemy_card: bool,
 }
 
 impl TrackerCard {
@@ -1226,6 +1339,7 @@ impl TrackerCard {
             image_uri: scry_card.get_image_uri().to_owned(),
             rarity: String::from(scry_card.rarity()),
             in_booster: scry_card.booster(),
+            is_alchemy_card: (mtga_card.rebalanced_card_link != 0 && mtga_card.is_rebalanced),
         }
     }
 
@@ -1261,7 +1375,7 @@ impl TrackerCard {
         self.collector_number.as_ref()
     }
 
-    pub fn get_by_id(db: &Connection, arena_id: u32) -> Result<TrackerCard, Box<dyn Error>> {
+    pub fn get_by_id(db: &Connection, arena_id: u32) -> Result<TrackerCard> {
         let mut stmt = db.prepare(
             "SELECT cards_db.'name',
                         cards_db.'set',
@@ -1270,7 +1384,8 @@ impl TrackerCard {
                         cards_db.'arena_id',
                         cards_db.'image_uri',
                         cards_db.'rarity',
-                        cards_db.'in_booster'
+                        cards_db.'in_booster',
+                        cards_db.'is_alchemy_card'
                 FROM cards_db
                 WHERE cards_db.'arena_id' = ?1",
         )?;
@@ -1286,6 +1401,7 @@ impl TrackerCard {
                 image_uri: row.get(5)?,
                 rarity: row.get(6)?,
                 in_booster: row.get(7)?,
+                is_alchemy_card: row.get(8)?,
             };
             return Ok(card);
         } else {
@@ -1293,7 +1409,7 @@ impl TrackerCard {
         }
     }
 
-    pub fn get_all_cards(db: &Connection) -> Result<HashMap<u32, TrackerCard>, Box<dyn Error>> {
+    pub fn get_all_cards(db: &Connection) -> Result<HashMap<u32, TrackerCard>> {
         let mut tracker_cards = HashMap::new();
 
         let mut stmt = db.prepare(
@@ -1304,7 +1420,8 @@ impl TrackerCard {
                         cards_db.'arena_id',
                         cards_db.'image_uri',
                         cards_db.'rarity',
-                        cards_db.'in_booster'
+                        cards_db.'in_booster',
+                        cards_db.'is_alchemy_card'
                 FROM cards_db",
         )?;
 
@@ -1317,6 +1434,7 @@ impl TrackerCard {
             let image_uri = row.get(5)?;
             let rarity = row.get(6)?;
             let in_booster = row.get(7)?;
+            let is_alchemy_card = row.get(8)?;
 
             Ok(TrackerCard {
                 name,
@@ -1327,6 +1445,7 @@ impl TrackerCard {
                 image_uri,
                 rarity,
                 in_booster,
+                is_alchemy_card,
             })
         })?;
 
@@ -1336,6 +1455,69 @@ impl TrackerCard {
         }
 
         Ok(tracker_cards)
+    }
+
+    pub fn get_all_cards_from_set(db: &Connection, set: &str) -> Result<HashMap<u32, TrackerCard>> {
+        let mut tracker_cards = HashMap::new();
+
+        let mut stmt = db.prepare(
+            "SELECT cards_db.'name',
+                        cards_db.'set',
+                        cards_db.'collector_number',
+                        cards_db.'scry_uri',
+                        cards_db.'arena_id',
+                        cards_db.'image_uri',
+                        cards_db.'rarity',
+                        cards_db.'in_booster',
+                        cards_db.'is_alchemy_card'
+                FROM cards_db
+                WHERE cards_db.'set' = ?1",
+        )?;
+
+        let rows = stmt.query_map([set], |row| {
+            let name = row.get(0)?;
+            let set = row.get(1)?;
+            let collector_number = row.get(2)?;
+            let scry_uri = row.get(3)?;
+            let arena_id = row.get(4)?;
+            let image_uri = row.get(5)?;
+            let rarity = row.get(6)?;
+            let in_booster = row.get(7)?;
+            let is_alchemy_card = row.get(8)?;
+
+            Ok(TrackerCard {
+                name,
+                set,
+                collector_number,
+                scry_uri,
+                arena_id,
+                image_uri,
+                rarity,
+                in_booster,
+                is_alchemy_card,
+            })
+        })?;
+
+        for row in rows {
+            let tracker_card = row?;
+            tracker_cards.insert(tracker_card.arena_id(), tracker_card);
+        }
+
+        Ok(tracker_cards)
+    }
+
+    pub fn is_alchemy_card(&self) -> bool {
+        self.is_alchemy_card
+    }
+}
+
+impl Display for TrackerCard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} - ({}:#{}) (#{}) ({})",
+            self.name, self.set, self.collector_number, self.arena_id, self.rarity
+        )
     }
 }
 
@@ -1353,3 +1535,63 @@ pub struct AccountInfoData {
     pub screen_name: String,
 }
 
+#[derive(Debug)]
+pub struct HashableF64 {
+    inner_value: f64,
+}
+
+impl Serialize for HashableF64 {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_f64(self.inner_value)
+    }
+}
+
+impl<'de> Deserialize<'de> for HashableF64 {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_f64(F64Visitor)
+    }
+}
+
+struct F64Visitor;
+
+impl<'de> Visitor<'de> for F64Visitor {
+    type Value = HashableF64;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a float value")
+    }
+
+    fn visit_f64<E>(self, v: f64) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(HashableF64 { inner_value: v })
+    }
+}
+
+impl Hash for HashableF64 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        integer_decode(self.inner_value).hash(state)
+    }
+}
+
+fn integer_decode(val: f64) -> (u64, i16, i8) {
+    use std::mem;
+    let bits: u64 = unsafe { mem::transmute(val) };
+    let sign: i8 = if bits >> 63 == 0 { 1 } else { -1 };
+    let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
+    let mantissa = if exponent == 0 {
+        (bits & 0xfffffffffffff) << 1
+    } else {
+        (bits & 0xfffffffffffff) | 0x10000000000000
+    };
+
+    exponent -= 1023 + 52;
+    (mantissa, exponent, sign)
+}

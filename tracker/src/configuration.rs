@@ -1,14 +1,13 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use crate::Result;
+use async_std::path::{Path, PathBuf};
+use std::env;
 
 pub struct Config {
     command: TrackerCommand,
 }
 
 impl Config {
-    pub fn new(args: env::Args) -> Result<Config, Box<dyn std::error::Error>> {
+    pub fn new(args: env::Args) -> Result<Config> {
         let default_collector_path = Path::new(
             r"./mtga-datacollector/bin/x64/Release/netstandard2.1/mtga-datacollector.dll",
         );
@@ -40,7 +39,7 @@ impl Config {
                         Path::new(args.get(3).ok_or("Please provide an mtga cards db path")?);
 
                     let output_file =
-                        Path::new(args.get(3).ok_or("Please provide an output file path")?);
+                        Path::new(args.get(4).ok_or("Please provide an output file path")?);
 
                     Ok(Config {
                         command: TrackerCommand::DumpArtistMapping(DumpArtistMappingParams {

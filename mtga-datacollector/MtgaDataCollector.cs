@@ -72,7 +72,8 @@ namespace mtga_datacollector
             screenName = WrapperController.Instance.AccountClient.AccountInformation.DisplayName
           };
 
-          var logEntry = new CollectorEvent {
+          var logEntry = new CollectorEvent
+          {
             Attachment = accountInfo,
             Timestamp = String.Format($"{DateTime.Now:O}"),
           };
@@ -132,7 +133,7 @@ namespace mtga_datacollector
               grpId = pair.Key,
               count = pair.Value,
             };
-          }).ToArray();
+          }).OrderBy(c => c.grpId).ToArray();
 
           var collectionEntry = new CollectorEvent
           {
