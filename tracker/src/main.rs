@@ -1,11 +1,9 @@
 #![windows_subsystem = "windows"]
 
 use std::env;
-use tracker::{configuration::Config, tracker::Tracker};
+use tracker::{configuration::Config, tracker::Tracker, Result};
 
 use async_std::task;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 async fn async_main() -> Result<()> {
     let config = Config::new(env::args())?;

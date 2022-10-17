@@ -1,22 +1,35 @@
+mod components;
 mod style;
-mod update;
 
+use std::collections::hash_map::DefaultHasher;
 use std::env;
-use std::time::{Duration, Instant};
+use std::hash::{Hash, Hasher};
+use std::time::Duration;
 
 use async_std::path::PathBuf;
-use iced::alignment::{Horizontal, Vertical};
-use iced::image::Handle;
-use iced::pure::widget::Column;
-use iced::pure::{button, column, container, image, row, scrollable, text, tooltip, Element};
-use iced::{executor, pure::Application, Command, Settings};
-use iced::{Alignment, Length};
+use iced::{
+    executor,
+    pure::{column, container, row, Application, Element},
+    Command, Length, Settings,
+};
+use injector::Injector;
 
-use crate::assets::*;
-use crate::configuration::ParseParams;
-use crate::logwatcher::{LineParseResult, LogWatcher};
-use crate::mtgadb::{MtgaDb, UserSession};
-use crate::Result;
+use crate::{
+    assets::*,
+    configuration::ParseParams,
+    logwatcher,
+    logwatcher::{LineParseResult, LogWatcher},
+    mtgadb::{MtgaDb, UserSession},
+    Result,
+};
+
+use components::{
+    collection::CollectionComponent,
+    draftsummary::DraftSummaryComponent,
+    injectbar::{InjectBarComponent, Status},
+    logview::LogViewComponent,
+    setselector::{SetSelectorComponent, SetSelectorMessage},
+};
 
 #[derive(Default)]
 pub struct TrackerGuiConfig {
@@ -24,40 +37,51 @@ pub struct TrackerGuiConfig {
     database_path: PathBuf,
 }
 
-pub enum Status {
-    Ok(String),
-    Error(String),
-}
-
 pub struct TrackerGui {
-    display_user_session: Option<UserSession>,
+    draft_summary_component: DraftSummaryComponent,
+    set_selector_component: SetSelectorComponent,
+    inject_bar_component: InjectBarComponent,
+    logview_component: LogViewComponent,
+    collection_component: CollectionComponent,
+    mode: Mode,
     log_user_session: Option<UserSession>,
+    display_user_session: Option<UserSession>,
     collector_path: PathBuf,
-    status: Status,
-    selected_set: String,
-    messages: Vec<String>,
     log_watcher: Option<LogWatcher>,
     database: MtgaDb,
-    highlighted_cards: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-pub enum TrackerInteraction {
-    InjectPressed,
-    SetSelected(String),
-}
-
-#[derive(Debug)]
 pub enum TrackerMessage {
     TrackerInjected(Result<()>),
-    UserLoggedIn(Result<UserSession>),
-    TrackerInteraction(TrackerInteraction),
-    ParseTriggered(Instant),
-    Ok(String),
-    Error((String, String)),
+    DisplayUserChanged(Result<UserSession>),
     ParseCompleted(Result<(LogWatcher, Vec<LineParseResult>)>),
-    None(()),
+    Action(Action),
+    SetSelector(SetSelectorMessage),
+}
+
+#[derive(Debug, Clone)]
+pub enum Action {
+    Reinject,
+    ChangeSet(String),
+    ParseLog,
     LogMessage(String),
+    SwitchView,
+}
+
+#[derive(Debug, Clone)]
+pub enum Mode {
+    ShowLog,
+    ShowCollection,
+}
+
+impl Mode {
+    pub fn next(&self) -> Mode {
+        match self {
+            Mode::ShowLog => Mode::ShowCollection,
+            Mode::ShowCollection => Mode::ShowLog,
+        }
+    }
 }
 
 impl Application for TrackerGui {
@@ -82,28 +106,30 @@ impl Application for TrackerGui {
         };
 
         let gui = TrackerGui {
-            display_user_session: None,
+            draft_summary_component: DraftSummaryComponent::new(flags.database_path.as_path()),
+            set_selector_component: SetSelectorComponent::new(),
+            inject_bar_component: InjectBarComponent::new(),
+            logview_component: LogViewComponent::new(),
+            collection_component: CollectionComponent::new(flags.database_path.as_path()),
+            mode: Mode::ShowLog,
             log_user_session: None,
+            display_user_session: None,
             collector_path: flags.collector_dll_path.clone(),
-            selected_set: String::from("DMU"),
-            status: Status::Ok(String::from("Initializing...")),
-            messages: vec![],
             log_watcher: Some(LogWatcher::new(log_path)),
             database: MtgaDb::new(flags.database_path.clone()),
-            highlighted_cards: vec![],
         };
 
         let init_commands = vec![
             Command::perform(
-                update::inject_tracker(flags.collector_dll_path.clone()),
+                TrackerGui::inject_tracker(flags.collector_dll_path.clone()),
                 TrackerMessage::TrackerInjected,
             ),
             Command::perform(
                 {
                     let database = flags.database_path.clone();
-                    async move { update::get_user_session(database).await }
+                    async move { TrackerGui::get_user_session(database).await }
                 },
-                TrackerMessage::UserLoggedIn,
+                |user| TrackerMessage::DisplayUserChanged(user),
             ),
         ];
 
@@ -115,214 +141,270 @@ impl Application for TrackerGui {
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
-        match update::handle_message(self, message) {
-            Ok(message) => message,
-            Err(e) => Command::perform(
-                async move { (String::from("update"), e.to_string()) },
-                TrackerMessage::Error,
-            ),
+        match message {
+            TrackerMessage::TrackerInjected(r) => match r {
+                Ok(_) => {
+                    println!("Inject success");
+                    self.inject_bar_component
+                        .set_status(Status::Ok(String::from(
+                            "Data collector injected successfully.",
+                        )));
+                }
+                Err(e) => {
+                    println!("Error injecting");
+                    self.inject_bar_component
+                        .set_status(Status::Error(e.to_string()));
+                }
+            },
+            TrackerMessage::DisplayUserChanged(r) => match r {
+                Ok(user) => {
+                    self.display_user_session = Some(user.clone());
+                    let mut commands = vec![];
+                    match self.draft_summary_component.set_current_user(user.clone()) {
+                        Ok(command) => commands.push(command),
+                        Err(e) => commands
+                            .push(Command::perform(async move { e.to_string() }, |error| {
+                                TrackerMessage::Action(Action::LogMessage(error))
+                            })),
+                    }
+
+                    match self.collection_component.set_current_user(user.clone()) {
+                        Ok(command) => commands.push(command),
+                        Err(e) => commands
+                            .push(Command::perform(async move { e.to_string() }, |error| {
+                                TrackerMessage::Action(Action::LogMessage(error))
+                            })),
+                    }
+
+                    return Command::batch(commands);
+                }
+                Err(e) => {
+                    return Command::perform(async move { e.to_string() }, |error| {
+                        TrackerMessage::Action(Action::LogMessage(error))
+                    })
+                }
+            },
+            TrackerMessage::Action(action) => match action {
+                Action::ParseLog => {
+                    let log_watcher = self.log_watcher.take();
+                    if log_watcher.is_some() {
+                        return Command::perform(
+                            async move { logwatcher::watch_log(log_watcher.unwrap()).await },
+                            TrackerMessage::ParseCompleted,
+                        );
+                    }
+                }
+                Action::LogMessage(message) => {
+                    println!("Log message: {}", message);
+                    self.logview_component.log_message(message);
+                }
+                Action::ChangeSet(set) => {
+                    let mut commands = vec![];
+                    match self
+                        .draft_summary_component
+                        .change_selected_set(set.clone())
+                    {
+                        Ok(command) => commands.push(command),
+                        Err(e) => {
+                            commands
+                                .push(Command::perform(async move { e.to_string() }, |error| {
+                                    TrackerMessage::Action(Action::LogMessage(error))
+                                }));
+                        }
+                    }
+
+                    match self.collection_component.change_selected_set(set.clone()) {
+                        Ok(command) => commands.push(command),
+                        Err(e) => {
+                            commands
+                                .push(Command::perform(async move { e.to_string() }, |error| {
+                                    TrackerMessage::Action(Action::LogMessage(error))
+                                }));
+                        }
+                    }
+
+                    return Command::batch(commands);
+                }
+                Action::Reinject => {
+                    return Command::perform(
+                        TrackerGui::inject_tracker(self.collector_path.clone()),
+                        TrackerMessage::TrackerInjected,
+                    )
+                }
+                Action::SwitchView => self.mode = self.mode.next(),
+            },
+            TrackerMessage::SetSelector(message) => {
+                return self.set_selector_component.update(message)
+            }
+            TrackerMessage::ParseCompleted(r) => match r {
+                Ok((watcher, parsed_lines)) => {
+                    self.log_watcher = Some(watcher);
+
+                    let commands = parsed_lines
+                    .into_iter()
+                    .map(|parsed_line| match parsed_line {
+                        logwatcher::LineParseResult::None => {
+                            Command::none()
+                        }
+                        logwatcher::LineParseResult::UserSession(event) => {
+                            let user_session =
+                                match self.database.get_user_session(Some(event.attachment)) {
+                                    Ok(user_session) => user_session,
+                                    Err(e) => {
+                                        return Command::perform(
+                                            async move { format!("parser-usersession error: {}", e.to_string())},
+                                            |error| TrackerMessage::Action(Action::LogMessage(error))
+                                        )
+                                    }
+                                };
+
+                            let message = format!("Current user: {}", user_session.screen_name());
+                            self.log_user_session = Some(user_session);
+
+                            Command::perform(async move { message }, |message| TrackerMessage::Action(Action::LogMessage(message)))
+                        }
+                        logwatcher::LineParseResult::CollectionEvent(event) => {
+                            let current_user = match self.log_user_session.as_ref() {
+                                Some(user) => user,
+                                None => {
+                                    return Command::perform(
+                                        async move { String::from("parser-collectionevent error: No user session is set") },
+                                        |error| TrackerMessage::Action(Action::LogMessage(error))
+                                    )
+                                }
+                            };
+
+                            let mut hasher = DefaultHasher::new();
+                            event.attachment.hash(&mut hasher);
+                            let collection_hash = hasher.finish() as i64;
+
+                            if let Err(e) = self.database.add_user_collection_event(
+                                current_user,
+                                collection_hash,
+                                event.timestamp.clone(),
+                                event.attachment,
+                            ) {
+                                return Command::perform(
+                                    async move { format!("parser-collectionevent error: {}", e.to_string()) },
+                                    |error| TrackerMessage::Action(Action::LogMessage(error))
+                                )
+                            };
+
+                            return Command::perform(
+                                {
+                                    let timestamp = event.timestamp.clone();
+                                    async move { format!("Collection updated at {}", timestamp) }
+                                },
+                                |message| TrackerMessage::Action(Action::LogMessage(message))
+                            );
+                        }
+                        logwatcher::LineParseResult::InventoryEvent(event) => {
+                            let current_user = match self.log_user_session.as_ref() {
+                                Some(user) => user,
+                                None => {
+                                    return Command::perform(
+                                        async move { String::from("parser-inventoryevent error: No user session is set") },
+                                        |error| TrackerMessage::Action(Action::LogMessage(error))
+                                    )
+                                }
+                            };
+
+                            let mut hasher = DefaultHasher::new();
+                            event.hash(&mut hasher);
+                            let inventory_hash = hasher.finish() as i64;
+
+                            if let Err(e) = self.database.add_user_inventory_event(
+                                current_user,
+                                inventory_hash,
+                                event.timestamp.clone(),
+                                event.attachment,
+                            ) {
+                                return Command::perform(
+                                    async move { format!("parser-inventoryevent error: {}", e.to_string()) },
+                                    |error| TrackerMessage::Action(Action::LogMessage(error))
+                                );
+                            };
+
+                            return Command::perform(
+                                {
+                                    let timestamp = event.timestamp.clone();
+                                    async move { format!("Player inventory event received at {}", timestamp) }
+                                },
+                                |message| TrackerMessage::Action(Action::LogMessage(message)),
+                            );
+                        },
+                        logwatcher::LineParseResult::InventoryUpdateEvent(event) => {
+                            let current_user = match self.log_user_session.as_ref() {
+                                Some(user) => user,
+                                None => {
+                                    return Command::perform(
+                                        async move { String::from("parser-inventoryupdateevent error: No user session is set") },
+                                        |error| TrackerMessage::Action(Action::LogMessage(error))
+                                    )
+                                }
+                            };
+
+                            let mut hasher = DefaultHasher::new();
+                            event.hash(&mut hasher);
+                            let inventory_update_hash = hasher.finish() as i64;
+
+                            if let Err(e) = self.database.add_user_inventory_update_event(
+                                current_user,
+                                inventory_update_hash,
+                                event.timestamp.clone(),
+                                event.attachment,
+                            ) {
+                                return Command::perform(
+                                    async move { format!("parser-inventoryupdateevent error: {}", e.to_string()) },
+                                    |error| TrackerMessage::Action(Action::LogMessage(error)),
+                                );
+                            };
+
+                            return Command::perform(
+                                {
+                                    let timestamp = event.timestamp.clone();
+                                    async move { format!("Player inventory update event received at {}", timestamp) }
+                                },
+                                |message| TrackerMessage::Action(Action::LogMessage(message)),
+                            );
+                        }
+                    })
+                    .collect::<Vec<Command<TrackerMessage>>>();
+
+                    return Command::batch(commands);
+                }
+                Err(e) => {
+                    return Command::perform(async move { e.to_string() }, |error| {
+                        TrackerMessage::Action(Action::LogMessage(error))
+                    })
+                }
+            },
         }
+        Command::none()
     }
 
     fn view(&self) -> Element<Self::Message> {
-        let sets = vec![
-            (
-                "dmu",
-                DMU_SYMBOL,
-                Length::Units(32),
-                "Dominaria United - DMU",
-            ),
-            (
-                "hbg",
-                HBG_SYMBOL,
-                Length::Units(32),
-                "Alchemy Horizons: Baldur's Gate - HBG",
-            ),
-            (
-                "snc",
-                SNC_SYMBOL,
-                Length::Units(28),
-                "Streets of New Capenna - SNC",
-            ),
-            (
-                "neo",
-                NEO_SYMBOL,
-                Length::Units(28),
-                "Kamigawa: Neon Dynasty - NEO",
-            ),
-            (
-                "vow",
-                VOW_SYMBOL,
-                Length::Units(32),
-                "Innistrad: Crimson Vow - VOW",
-            ),
-            (
-                "mid",
-                MID_SYMBOL,
-                Length::Units(32),
-                "Innistrad: Midnight Hunt - MID",
-            ),
-            (
-                "afr",
-                AFR_SYMBOL,
-                Length::Units(32),
-                "Adventures in the Forgotten Realms - AFR",
-            ),
-            (
-                "stx",
-                STX_SYMBOL,
-                Length::Units(32),
-                "Strixhaven: School of Mages - STX",
-            ),
-            ("khm", KHM_SYMBOL, Length::Units(32), "Kaldheim - KHM"),
-            (
-                "znr",
-                ZNR_SYMBOL,
-                Length::Units(32),
-                "Zendikar Rising - ZNR",
-            ),
-            ("m21", M21_SYMBOL, Length::Units(24), "Core Set 2021 - M21"),
-            (
-                "iko",
-                IKO_SYMBOL,
-                Length::Units(32),
-                "Ikoria: Lair of Behemoths - IKO",
-            ),
-            (
-                "thb",
-                THB_SYMBOL,
-                Length::Units(32),
-                "Theros Beyond Death - THB",
-            ),
-            (
-                "eld",
-                ELD_SYMBOL,
-                Length::Units(32),
-                "Throne of Eldraine - ELD",
-            ),
-            ("m20", M20_SYMBOL, Length::Units(24), "Core Set 2020 - M20"),
-            (
-                "war",
-                WAR_SYMBOL,
-                Length::Units(32),
-                "War of the Spark - WAR",
-            ),
-            (
-                "rna",
-                RNA_SYMBOL,
-                Length::Units(28),
-                "Ravnica Allegiance - RNA",
-            ),
-            (
-                "grn",
-                GRN_SYMBOL,
-                Length::Units(28),
-                "Guilds of Ravnica - GRN",
-            ),
-            ("m19", M19_SYMBOL, Length::Units(24), "Core Set 2019 - M19"),
-            ("dom", DOM_SYMBOL, Length::Units(32), "Dominaria - DOM"),
-            (
-                "rix",
-                RIX_SYMBOL,
-                Length::Units(32),
-                "Rivals of Ixalan - RIX",
-            ),
-            ("xln", XLN_SYMBOL, Length::Units(32), "Ixalan - XLN"),
-            (
-                "klr",
-                KLR_SYMBOL,
-                Length::Units(32),
-                "Kaladesh Remastered - KLR",
-            ),
-            (
-                "akr",
-                AKR_SYMBOL,
-                Length::Units(32),
-                "Amonkhet Remastered - AKR",
-            ),
-        ];
+        let set_selector = self.set_selector_component.view();
 
-        let mut buttons = vec![];
-        for (set, symbol, height, tooltip_text) in sets {
-            let i = image(Handle::from_memory(symbol.to_vec())).height(height);
-            let b: Element<TrackerInteraction> = button(i)
-                .on_press(TrackerInteraction::SetSelected(String::from(set)))
-                .height(height)
-                .into();
-            let t: Element<TrackerInteraction> =
-                tooltip(b, tooltip_text, iced::tooltip::Position::FollowCursor)
-                    .gap(5)
-                    .style(style::TooltipStyle)
-                    .into();
+        let status_bar = self.inject_bar_component.view();
 
-            buttons.push(t.map(TrackerMessage::TrackerInteraction));
-        }
-
-        let buttons_row = iced::pure::widget::Row::with_children(buttons)
-            .spacing(8)
-            .padding(5)
-            .align_items(Alignment::Center);
-
-        let messages: Element<TrackerInteraction> = Column::with_children(
-            self.messages
-                .iter()
-                .map(|msg| text(msg).size(12).into())
-                .collect::<Vec<Element<_>>>(),
-        )
-        .width(Length::Fill)
-        .into();
-        let scrollable_messages: Element<TrackerInteraction> = scrollable(messages).into();
-
-        let cards_list: Element<TrackerInteraction> = Column::with_children(
-            self.highlighted_cards
-                .iter()
-                .map(|msg| text(msg).size(12).into())
-                .collect::<Vec<Element<_>>>(),
-        )
-        .width(Length::Fill)
-        .into();
-        let scrollable_cards: Element<TrackerInteraction> = scrollable(cards_list).into();
-
-        let main_content: Element<TrackerInteraction> = row()
-            .push(scrollable_messages)
-            .push(scrollable_cards)
-            .into();
-
-        let main_content = column()
-            .push(buttons_row)
-            .push(main_content.map(TrackerMessage::TrackerInteraction))
-            .height(Length::Fill);
-
-        let status_message = {
-            let inject_status_text = match &self.status {
-                Status::Ok(value) => text(value)
-                    .color([0.0, 0.0, 0.0])
-                    .vertical_alignment(Vertical::Center),
-                Status::Error(e) => text(e)
-                    .color([1.0, 0.0, 0.0])
-                    .vertical_alignment(Vertical::Center),
-            };
-
-            let selected_set_text = text(format!("Selected set: {}", self.selected_set))
-                .vertical_alignment(Vertical::Center);
-
-            let status_row = row()
-                .push(inject_status_text)
-                .push(selected_set_text)
-                .align_items(Alignment::Center);
-            status_row
+        let side_view = match self.mode {
+            Mode::ShowLog => self.logview_component.view(),
+            Mode::ShowCollection => self.collection_component.view(),
         };
 
-        let inject_button: Element<TrackerInteraction> = button("Inject")
-            .on_press(TrackerInteraction::InjectPressed)
-            .into();
-
-        let status_bar = row()
-            .push(inject_button.map(TrackerMessage::TrackerInteraction))
-            .push(status_message)
-            .height(Length::Shrink);
-
-        let content = column().push(main_content).push(status_bar);
+        let content = column()
+            .push(set_selector)
+            .push(
+                container(
+                    row()
+                        .push(self.draft_summary_component.view())
+                        .push(side_view),
+                )
+                .height(Length::Fill)
+                .width(Length::Fill),
+            )
+            .push(status_bar);
 
         container(content)
             .width(Length::Fill)
@@ -331,13 +413,20 @@ impl Application for TrackerGui {
     }
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
-        iced::time::every(Duration::from_secs(1)).map(TrackerMessage::ParseTriggered)
+        iced::time::every(Duration::from_secs(1)).map(|_| TrackerMessage::Action(Action::ParseLog))
     }
 }
 
 impl TrackerGui {
-    pub fn set_status(&mut self, status: Status) {
-        self.status = status;
+    pub async fn inject_tracker(collector_dll_path: PathBuf) -> Result<()> {
+        let injector = Injector::new().await?;
+        injector.inject_tracker(collector_dll_path).await?;
+        Ok(())
+    }
+
+    pub async fn get_user_session(database_path: PathBuf) -> Result<UserSession> {
+        let db = MtgaDb::new(database_path);
+        db.get_user_session(None)
     }
 }
 
@@ -346,6 +435,11 @@ pub fn run(config: &ParseParams) -> Result<()> {
         flags: TrackerGuiConfig {
             collector_dll_path: config.collector_dll_path.clone(),
             database_path: config.database_path.clone(),
+        },
+        window: iced::window::Settings {
+            min_size: Some((1150, 800)),
+            //TODO: app icon icon: todo!(),
+            ..Default::default()
         },
         default_font: Some(OPEN_SANS_BOLD_FONT),
         default_text_size: 14,

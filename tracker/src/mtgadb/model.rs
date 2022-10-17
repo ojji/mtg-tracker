@@ -695,7 +695,7 @@ pub struct Date(String);
 ///   }
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct InventoryEvent {
     pub timestamp: String,
@@ -769,7 +769,7 @@ pub struct InventoryEvent {
 ///   "sealedTokens": 0
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerInventoryData {
     pub wc_common: u32,
@@ -814,7 +814,7 @@ impl Hash for PlayerInventoryData {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientVoucherDescription {
     pub image1: String,
@@ -887,7 +887,7 @@ impl Hash for ClientVoucherDescription {
 ///   }
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct InventoryUpdateEvent {
     pub timestamp: String,
@@ -950,7 +950,7 @@ pub struct InventoryUpdateEvent {
 ///   "parentcontext": null
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct InventoryUpdateData {
     delta: InventoryDelta,
@@ -997,7 +997,7 @@ pub struct InventoryUpdateData {
 ///   ]
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct InventoryDelta {
     pub gems_delta: i32,
@@ -1035,7 +1035,7 @@ pub struct InventoryDelta {
 ///   "set": "DMU"
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AetherizedCardInformation {
     pub grp_id: u32,
@@ -1070,7 +1070,7 @@ pub struct AetherizedCardInformation {
 /// `CustomerSupportGrant`, `EntryReward`, `EventGrantCardPool`, `CampaignGraphPayoutNode`,
 /// `CampaignGraphAutomaticPayoutNode`, `CampaignGraphPurchaseNode`, `CampaignGraphTieredRewardNode`,
 /// `AccumulativePayoutNode`, `Letter`.
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct InventoryUpdateContext {
     pub source: String,
@@ -1086,7 +1086,7 @@ pub struct InventoryUpdateContext {
 ///   "ccv": "DA"
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtSkin {
     pub art_id: u32,
@@ -1094,14 +1094,14 @@ pub struct ArtSkin {
 }
 
 /// `TicketStack` describes a new ticket added or removed in an inventory update event.
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 pub struct TicketStack {
     pub ticket: String,
     pub count: i32,
 }
 
 /// `VoucherStack` describes a new voucher added or removed in an inventory update event.
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 pub struct VoucherStack {
     #[serde(rename = "Id")]
     pub id: Guid,
@@ -1118,7 +1118,7 @@ pub struct VoucherStack {
 ///   "delta": 1
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 pub struct CustomTokenDeltaInfo {
     pub id: String,
     pub delta: i32,
@@ -1133,7 +1133,7 @@ pub struct CustomTokenDeltaInfo {
 ///   "count": 1
 /// }
 /// ```
-#[derive(Debug, Serialize, Deserialize, Hash)]
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct BoosterStack {
     pub collation_id: i32,
@@ -1235,14 +1235,14 @@ impl BoosterStack {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct CollectionEvent {
     pub timestamp: String,
     pub attachment: Vec<CollectedCard>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Hash)]
+#[derive(Debug, Deserialize, Serialize, Hash, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CollectedCard {
     pub grp_id: u32,
@@ -1521,21 +1521,21 @@ impl Display for TrackerCard {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct AccountInfoEvent {
     pub timestamp: String,
     pub attachment: AccountInfoData,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountInfoData {
     pub user_id: String,
     pub screen_name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HashableF64 {
     inner_value: f64,
 }

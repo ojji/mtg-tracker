@@ -170,6 +170,8 @@ impl Process {
         use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
         use windows::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY};
 
+        use crate::InjectError;
+
         let memory_manager = self.get_memory_manager().await?;
 
         let mut dos_header = IMAGE_DOS_HEADER::default();
@@ -226,7 +228,7 @@ impl Process {
                     .await?;
                 let function_address = module.load_address + function_address_rva as usize;
 
-                Ok::<ExportedFunction, Box<dyn std::error::Error + Send + Sync>>(ExportedFunction {
+                Ok::<ExportedFunction, InjectError>(ExportedFunction {
                     ordinal: (function_ordinal + base) as u32,
                     name: function_name,
                     address: function_address,
@@ -387,7 +389,7 @@ impl MemoryManager {
                 VirtualAllocEx(handle, None, data.len(), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 
             if allocated_address.is_null() {
-                return Err(Box::new(std::io::Error::last_os_error()));
+                return Err(std::io::Error::last_os_error().into());
             }
 
             let ret;
@@ -400,7 +402,7 @@ impl MemoryManager {
             );
 
             if !ret.as_bool() {
-                return Err(Box::new(std::io::Error::last_os_error()));
+                return Err(std::io::Error::last_os_error().into());
             }
 
             allocated_address as usize

@@ -9,8 +9,7 @@ use rusqlite::{params, Connection, Transaction};
 use std::collections::{HashMap, HashSet};
 
 use self::model::CollectedCard;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+use crate::Result;
 
 #[derive(Clone)]
 pub struct MtgaDb {
@@ -1002,7 +1001,7 @@ impl MtgaDb {
 }
 
 /// Type representing a user in the tracker client
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UserSession {
     /// The collector user id
     user_id: u32,
@@ -1020,4 +1019,8 @@ impl UserSession {
     pub fn user_id(&self) -> u32 {
         self.user_id
     }
+}
+
+
+pub struct DraftSummary {
 }

@@ -6,7 +6,7 @@ use async_std::io::ReadExt;
 use async_std::path::{Path, PathBuf};
 use std::io::SeekFrom;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LineParseResult {
     None,
     UserSession(AccountInfoEvent),

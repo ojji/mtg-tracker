@@ -6,8 +6,67 @@ use assembler::Assembler;
 
 use async_std::{path::Path, stream::StreamExt};
 use process::{processes, ExportedFunction, Module, Process};
-use std::collections::HashMap;
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+use std::{collections::HashMap, fmt::Display, num::TryFromIntError, string::FromUtf8Error};
+
+#[derive(Debug, Clone)]
+pub enum InjectError {
+    IoError(String),
+    ConversionError(String),
+    CustomError(String),
+    WindowsApiError(String),
+}
+
+impl From<std::io::Error> for InjectError {
+    fn from(err: std::io::Error) -> Self {
+        InjectError::IoError(format!("IO error: {}", err.to_string()))
+    }
+}
+
+impl From<&str> for InjectError {
+    fn from(err: &str) -> Self {
+        InjectError::CustomError(String::from(err))
+    }
+}
+
+impl From<String> for InjectError {
+    fn from(err: String) -> Self {
+        InjectError::CustomError(err)
+    }
+}
+
+impl From<TryFromIntError> for InjectError {
+    fn from(err: TryFromIntError) -> Self {
+        InjectError::ConversionError(format!("Int conversion error: {}", err.to_string()))
+    }
+}
+
+impl From<FromUtf8Error> for InjectError {
+    fn from(err: FromUtf8Error) -> Self {
+        InjectError::ConversionError(format!(
+            "Utf-8 string conversion error: {}",
+            err.to_string()
+        ))
+    }
+}
+
+impl From<windows::core::Error> for InjectError {
+    fn from(err: windows::core::Error) -> Self {
+        InjectError::WindowsApiError(format!("OS error: {}", err.to_string()))
+    }
+}
+
+impl Display for InjectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InjectError::IoError(e) => write!(f, "{}", e),
+            InjectError::ConversionError(e) => write!(f, "{}", e),
+            InjectError::CustomError(e) => write!(f, "{}", e),
+            InjectError::WindowsApiError(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+pub type Result<T> = std::result::Result<T, InjectError>;
 
 pub struct Injector {
     process: Process,

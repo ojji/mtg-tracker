@@ -12,3 +12,25 @@ impl container::StyleSheet for TooltipStyle {
         }
     }
 }
+
+pub struct DraftSummaryPanel;
+impl container::StyleSheet for DraftSummaryPanel {
+    fn style(&self) -> container::Style {
+        container::Style {
+            border_color: Color::BLACK,
+            border_width: 1.0,
+            ..Default::default()
+        }
+    }
+}
+
+pub struct DebugStyle;
+impl container::StyleSheet for DebugStyle {
+    fn style(&self) -> container::Style {
+        container::Style {
+            border_color: Color::BLACK,
+            border_width: 1.0,
+            ..Default::default()
+        }
+    }
+}

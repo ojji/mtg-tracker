@@ -3,8 +3,7 @@ use injector::Injector;
 use crate::configuration::{Config, TrackerCommand};
 use crate::gui;
 use crate::mtgadb::MtgaDb;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+use crate::Result;
 
 pub struct Tracker {}
 
