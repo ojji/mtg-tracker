@@ -4,7 +4,7 @@ use async_std::fs::File;
 use async_std::io::WriteExt;
 use async_std::path::{Path, PathBuf};
 use iced::futures::AsyncReadExt;
-use model::{MtgaCard, ScryCard, TrackerCard};
+use model::{MtgaCard, PlayerInventoryData, ScryCard, TrackerCard};
 use rusqlite::{params, Connection, Transaction};
 use std::collections::{HashMap, HashSet};
 
@@ -962,7 +962,7 @@ impl MtgaDb {
         current_user: &UserSession,
         inventory_hash: i64,
         timestamp: String,
-        inventory_data: model::PlayerInventoryData,
+        inventory_data: PlayerInventoryData,
     ) -> Result<bool> {
         let db = Connection::open(self.db_path.as_path())?;
         let already_inserted = match db.query_row(
@@ -998,6 +998,82 @@ impl MtgaDb {
 
         Ok(false)
     }
+
+    fn get_inventory_for_user(&self, user_id: u32) -> Result<PlayerInventoryData> {
+        let db = Connection::open(self.db_path.as_path())?;
+
+        let mut stmt = db.prepare(
+            "
+            SELECT user_inventory.'inventory_data'
+            FROM user_inventory
+            WHERE user_inventory.'user_id' = ?1
+            ORDER BY user_inventory.'timestamp' DESC
+            LIMIT 1
+        ",
+        )?;
+
+        let mut results = stmt.query(params![user_id])?;
+
+        match results.next()? {
+            Some(inventory_data) => {
+                let result: PlayerInventoryData = serde_json::from_value(inventory_data.get(0)?)?;
+                return Ok(result);
+            }
+            None => {
+                return Err("Could not find users inventory".into());
+            }
+        };
+    }
+
+    pub fn get_played_drafts(&self, user_id: u32, set: &str) -> Result<Vec<DraftDetails>> {
+        Ok(vec![])
+    }
+
+    pub fn get_rare_wildcards(&self, user_id: u32) -> Result<u32> {
+        let inventory = self.get_inventory_for_user(user_id)?;
+        Ok(inventory.wc_rare)
+    }
+
+    pub fn get_mythic_wildcards(&self, user_id: u32) -> Result<u32> {
+        let inventory = self.get_inventory_for_user(user_id)?;
+        Ok(inventory.wc_mythic)
+    }
+
+    pub fn get_packs_owned(&self, user_id: u32, set: &str) -> Result<u32> {
+        let inventory = self.get_inventory_for_user(user_id)?;
+        let boosters_count = inventory
+            .boosters
+            .iter()
+            .filter_map(|booster| {
+                if &booster.name_from_collation_id() == set {
+                    Some(booster.count as u32)
+                } else {
+                    None
+                }
+            })
+            .fold(0, |sum, booster_count| sum + booster_count);
+
+        Ok(boosters_count)
+    }
+
+    /// Retrieve the drop rates for a given set in a `(rare_drop_rate, mythic_drop_rate)` tuple
+    /// Reference: [https://magic.wizards.com/en/mtgarena/drop-rates]
+    pub fn get_drop_rates(
+        &self,
+        set: &str,
+    ) -> Result<(
+        f64, /* rare drop rate */
+        f64, /* mythic drop rate */
+    )> {
+        match set {
+            "xln" | "rix" | "dom" | "m19" | "grn" | "rna" | "war" | "m20" | "eld" | "thb"
+            | "iko" | "m21" | "stx" | "neo" => Ok((7.0 / 8.0, 1.0 / 8.0)), // 1:8
+            "znr" | "khm" | "mid" | "vow" => Ok((6.4 / 7.4, 1.0 / 7.4)), // 1:7.4
+            "klr" | "afr" | "snc" | "hbg" | "dmu" => Ok((6.0 / 7.0, 1.0 / 7.0)), // 1:7
+            "akr" => Ok((5.0 / 6.0, 1.0 / 6.0)),                         // 1:6
+            other => Err(format!("unrecognized set name: {} in get_drop_rates()", other).into()),
+        }
+    }
 }
 
 /// Type representing a user in the tracker client
@@ -1021,6 +1097,130 @@ impl UserSession {
     }
 }
 
+/// A type describing the drafts played and stored in the database including the type, mythic and rare cards collected
+/// and the result score.
+#[derive(Debug, Clone)]
+pub struct DraftDetails {
+    draft_id: u32,
+    timestamp: String,
+    draft_type: String,
+    rares_collected: u32,
+    mythics_collected: u32,
+    wins: u32,
+    losses: u32,
+}
 
-pub struct DraftSummary {
+impl DraftDetails {
+    pub fn rares_collected(&self) -> u32 {
+        self.rares_collected
+    }
+
+    pub fn mythics_collected(&self) -> u32 {
+        self.mythics_collected
+    }
+
+    pub fn wins(&self) -> u32 {
+        self.wins
+    }
+
+    pub fn losses(&self) -> u32 {
+        self.losses
+    }
+
+    pub fn cost_in_gold(&self) -> u32 {
+        match self.draft_type.as_str() {
+            "quick" => 5000,
+            "premier" => 10000,
+            "traditional" => 10000,
+            other => panic!("unrecognized format {} in cost_in_gold()", other),
+        }
+    }
+
+    pub fn cost_in_gems(&self) -> u32 {
+        match self.draft_type.as_str() {
+            "quick" => 750,
+            "premier" => 1500,
+            "traditional" => 1500,
+            other => panic!("unrecognized format {} in cost_in_gems()", other),
+        }
+    }
+
+    pub fn is_bo3(&self) -> bool {
+        match self.draft_type.as_str() {
+            "quick" => false,
+            "premier" => false,
+            "traditional" => true,
+            other => panic!("unrecognized format {} in cost_in_gems()", other),
+        }
+    }
+
+    pub fn reward_gems(&self) -> u32 {
+        match self.draft_type.as_str() {
+            "quick" => match self.wins {
+                0 => 50,
+                1 => 100,
+                2 => 200,
+                3 => 300,
+                4 => 450,
+                5 => 650,
+                6 => 850,
+                7 => 950,
+                _ => unreachable!(),
+            },
+            "premier" => match self.wins {
+                0 => 50,
+                1 => 100,
+                2 => 250,
+                3 => 1000,
+                4 => 1400,
+                5 => 1600,
+                6 => 1800,
+                7 => 2200,
+                _ => unreachable!(),
+            },
+            "traditional" => match self.wins {
+                0 => 100,
+                1 => 250,
+                2 => 1000,
+                3 => 2500,
+                _ => unreachable!(),
+            },
+            other => panic!("unrecognized format {} in reward_gems()", other),
+        }
+    }
+
+    pub fn reward_packs(&self) -> f64 {
+        match self.draft_type.as_str() {
+            "quick" => match self.wins {
+                0 => 1.2,
+                1 => 1.22,
+                2 => 1.24,
+                3 => 1.26,
+                4 => 1.30,
+                5 => 1.35,
+                6 => 1.40,
+                7 => 2.0,
+                _ => unreachable!(),
+            },
+            "premier" => match self.wins {
+                0 => 1.0,
+                1 => 1.0,
+                2 => 2.0,
+                3 => 2.0,
+                4 => 3.0,
+                5 => 4.0,
+                6 => 5.0,
+                7 => 6.0,
+                _ => unreachable!(),
+            },
+            "traditional" => match self.wins {
+                0 => 1.0,
+                1 => 1.0,
+                2 => 3.0,
+                3 => 6.0,
+                _ => unreachable!(),
+            },
+            other => panic!("unrecognized format {} in reward_packs()", other),
+        }
+    }
 }
