@@ -45,7 +45,9 @@ namespace mtga_datacollector
           string[] requiredSets = {"ANA", "ANB", "AHA1", "AHA2", "AHA3", "AHA4", "AHA5", "AHA6", "EA1", "XLN",
             "RIX", "DAR" /* this is "DOM" they just renamed it for some reason */, "M19", "GRN", "RNA", "WAR", "M20", "ELD", "THB", "IKO", "M21", "JMP",
             "AKR", "ZNR", "KLR", "KHM", "STX", "STA", "AFR", "MH1", "MH2", "J21", "MID", "Y22-MID" /* YMID in scry */,
-            "VOW", "NEO", "Y22-NEO", "SNC", "Y22-SNC", "HBG", "DMU", "Y23-DMU" /* YDMU in scry */ };
+            "VOW", "NEO", "Y22-NEO", "SNC", "Y22-SNC", "HBG", "DMU", "Y23-DMU" /* YDMU in scry */,
+            "BRO", "Y23-BRO", "BRR", "EA2", "ONE", "Y23-ONE", "SIR", "SIS", "MOM", "MUL", "MAT", "LTR", "AHA7", "EA3"
+          };
 
           var setsWithCards = new Dictionary<string, List<CardPrintingData>>();
           foreach (var set in requiredSets)
@@ -182,6 +184,9 @@ namespace mtga_datacollector
         case "Y23-DMU": return "ydmu";
         case "DAR": return "dom";
         case "G18": return "m19"; // m19 gift card
+        case "Y23-BRO": return "ybro";
+        case "Y23-ONE": return "yone";
+        case "AHA7": return "ha7";
         default: return arenaSetName.ToLower();
       }
     }

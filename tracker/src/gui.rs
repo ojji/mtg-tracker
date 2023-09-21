@@ -2,23 +2,22 @@ mod components;
 mod style;
 
 use std::collections::hash_map::DefaultHasher;
-use std::env;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
+use std::env;
 
 use async_std::path::PathBuf;
-use iced::{
-    executor,
-    pure::{column, container, row, Application, Element},
-    Command, Length, Settings,
-};
+use iced::widget::{column, container, row};
+use iced::{executor, Application, Command, Element, Font, Length, Settings, Theme};
+use iced_futures::Subscription;
 use injector::Injector;
 
+use crate::logger::{LogService, Logger, LoggerEvent, Severity};
+use crate::mtgadb::model::{ParseResult, ParseResults};
+use crate::parser;
 use crate::{
-    assets::*,
     configuration::ParseParams,
-    logwatcher,
-    logwatcher::{LineParseResult, LogWatcher},
+    logwatcher::LogWatcher,
     mtgadb::{MtgaDb, UserSession},
     Result,
 };
@@ -30,6 +29,8 @@ use components::{
     logview::LogViewComponent,
     setselector::{SetSelectorComponent, SetSelectorMessage},
 };
+
+use style::TrackerTheme;
 
 #[derive(Default)]
 pub struct TrackerGuiConfig {
@@ -49,15 +50,18 @@ pub struct TrackerGui {
     collector_path: PathBuf,
     log_watcher: Option<LogWatcher>,
     database: MtgaDb,
+    logger: Option<Logger>,
 }
 
 #[derive(Debug, Clone)]
 pub enum TrackerMessage {
     TrackerInjected(Result<()>),
     DisplayUserChanged(Result<UserSession>),
-    ParseCompleted(Result<(LogWatcher, Vec<LineParseResult>)>),
+    ParseCompleted(Result<(LogWatcher, Vec<ParseResults>)>),
     Action(Action),
     SetSelector(SetSelectorMessage),
+    LoggerInit(Logger),
+    None(()),
 }
 
 #[derive(Debug, Clone)]
@@ -65,7 +69,7 @@ pub enum Action {
     Reinject,
     ChangeSet(String),
     ParseLog,
-    LogMessage(String),
+    LogMessage(String, Severity),
     SwitchView,
 }
 
@@ -88,6 +92,7 @@ impl Application for TrackerGui {
     type Executor = executor::Default;
     type Message = TrackerMessage;
     type Flags = TrackerGuiConfig;
+    type Theme = Theme;
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let log_path: PathBuf = if cfg!(windows) {
@@ -117,6 +122,7 @@ impl Application for TrackerGui {
             collector_path: flags.collector_dll_path.clone(),
             log_watcher: Some(LogWatcher::new(log_path)),
             database: MtgaDb::new(flags.database_path.clone()),
+            logger: None,
         };
 
         let init_commands = vec![
@@ -144,16 +150,26 @@ impl Application for TrackerGui {
         match message {
             TrackerMessage::TrackerInjected(r) => match r {
                 Ok(_) => {
-                    println!("Inject success");
                     self.inject_bar_component
                         .set_status(Status::Ok(String::from(
                             "Data collector injected successfully.",
                         )));
+                    return Command::perform(async {}, |_| {
+                        TrackerMessage::Action(Action::LogMessage(
+                            String::from("Data collector injected successfully."),
+                            Severity::Debug,
+                        ))
+                    });
                 }
                 Err(e) => {
-                    println!("Error injecting");
                     self.inject_bar_component
                         .set_status(Status::Error(e.to_string()));
+                    return Command::perform(async {}, move |_| {
+                        TrackerMessage::Action(Action::LogMessage(
+                            format!("Error injecting: {}", e.to_string()),
+                            Severity::Error,
+                        ))
+                    });
                 }
             },
             TrackerMessage::DisplayUserChanged(r) => match r {
@@ -162,25 +178,29 @@ impl Application for TrackerGui {
                     let mut commands = vec![];
                     match self.draft_summary_component.set_current_user(user.clone()) {
                         Ok(command) => commands.push(command),
-                        Err(e) => commands
-                            .push(Command::perform(async move { e.to_string() }, |error| {
-                                TrackerMessage::Action(Action::LogMessage(error))
-                            })),
+                        Err(e) => commands.push(Command::perform(async {}, move |_| {
+                            TrackerMessage::Action(Action::LogMessage(
+                                e.to_string(),
+                                Severity::Error,
+                            ))
+                        })),
                     }
 
                     match self.collection_component.set_current_user(user.clone()) {
                         Ok(command) => commands.push(command),
-                        Err(e) => commands
-                            .push(Command::perform(async move { e.to_string() }, |error| {
-                                TrackerMessage::Action(Action::LogMessage(error))
-                            })),
+                        Err(e) => commands.push(Command::perform(async {}, move |_| {
+                            TrackerMessage::Action(Action::LogMessage(
+                                e.to_string(),
+                                Severity::Error,
+                            ))
+                        })),
                     }
 
                     return Command::batch(commands);
                 }
                 Err(e) => {
-                    return Command::perform(async move { e.to_string() }, |error| {
-                        TrackerMessage::Action(Action::LogMessage(error))
+                    return Command::perform(async {}, move |_| {
+                        TrackerMessage::Action(Action::LogMessage(e.to_string(), Severity::Error))
                     })
                 }
             },
@@ -189,14 +209,18 @@ impl Application for TrackerGui {
                     let log_watcher = self.log_watcher.take();
                     if log_watcher.is_some() {
                         return Command::perform(
-                            async move { logwatcher::watch_log(log_watcher.unwrap()).await },
+                            async move { parser::watch_log(log_watcher.unwrap()).await },
                             TrackerMessage::ParseCompleted,
                         );
                     }
                 }
-                Action::LogMessage(message) => {
-                    println!("Log message: {}", message);
-                    self.logview_component.log_message(message);
+                Action::LogMessage(message, severity) => {
+                    self.logview_component.log_message(message.clone());
+                    if let Some(e) = self.logger.as_mut() {
+                        e.log(message.clone(), severity);
+                    }
+
+                    return Command::perform(async {}, TrackerMessage::None);
                 }
                 Action::ChangeSet(set) => {
                     let mut commands = vec![];
@@ -206,20 +230,24 @@ impl Application for TrackerGui {
                     {
                         Ok(command) => commands.push(command),
                         Err(e) => {
-                            commands
-                                .push(Command::perform(async move { e.to_string() }, |error| {
-                                    TrackerMessage::Action(Action::LogMessage(error))
-                                }));
+                            commands.push(Command::perform(async {}, move |_| {
+                                TrackerMessage::Action(Action::LogMessage(
+                                    e.to_string(),
+                                    Severity::Error,
+                                ))
+                            }));
                         }
                     }
 
                     match self.collection_component.change_selected_set(set.clone()) {
                         Ok(command) => commands.push(command),
                         Err(e) => {
-                            commands
-                                .push(Command::perform(async move { e.to_string() }, |error| {
-                                    TrackerMessage::Action(Action::LogMessage(error))
-                                }));
+                            commands.push(Command::perform(async {}, move |_| {
+                                TrackerMessage::Action(Action::LogMessage(
+                                    e.to_string(),
+                                    Severity::Error,
+                                ))
+                            }));
                         }
                     }
 
@@ -237,148 +265,112 @@ impl Application for TrackerGui {
                 return self.set_selector_component.update(message)
             }
             TrackerMessage::ParseCompleted(r) => match r {
-                Ok((watcher, parsed_lines)) => {
+                Ok((watcher, parsed_messages)) => {
                     self.log_watcher = Some(watcher);
 
-                    let commands = parsed_lines
-                    .into_iter()
-                    .map(|parsed_line| match parsed_line {
-                        logwatcher::LineParseResult::None => {
-                            Command::none()
-                        }
-                        logwatcher::LineParseResult::UserSession(event) => {
-                            let user_session =
-                                match self.database.get_user_session(Some(event.attachment)) {
+                    let commands = parsed_messages.into_iter().map(|parsed_message| {
+                        match parsed_message {
+                            ParseResults::AccountInfoResult(r) => {
+                                let user_session = match self.database.get_user_session(Some(r.user_id()), Some(r.screen_name())) {
                                     Ok(user_session) => user_session,
                                     Err(e) => {
                                         return Command::perform(
-                                            async move { format!("parser-usersession error: {}", e.to_string())},
-                                            |error| TrackerMessage::Action(Action::LogMessage(error))
+                                            async {},
+                                            move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-usersession error: {}", e.to_string()), Severity::Error))
                                         )
                                     }
                                 };
 
-                            let message = format!("Current user: {}", user_session.screen_name());
-                            self.log_user_session = Some(user_session);
+                                let message = format!("Current user: {}", user_session.screen_name());
+                                self.log_user_session = Some(user_session);
 
-                            Command::perform(async move { message }, |message| TrackerMessage::Action(Action::LogMessage(message)))
-                        }
-                        logwatcher::LineParseResult::CollectionEvent(event) => {
-                            let current_user = match self.log_user_session.as_ref() {
-                                Some(user) => user,
-                                None => {
-                                    return Command::perform(
-                                        async move { String::from("parser-collectionevent error: No user session is set") },
-                                        |error| TrackerMessage::Action(Action::LogMessage(error))
-                                    )
+                                Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(message, Severity::Info)))
+                            },
+                            ParseResults::InventoryUpdateResult(inventory_update) => {
+                                let current_user = match self.log_user_session.as_ref() {
+                                    Some(user) => user,
+                                    None => {
+                                        return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(String::from("parser-inventoryupdateevent error: No user session is set"), Severity::Error))); }
+                                };
+
+                                let mut hasher= DefaultHasher::new();
+                                inventory_update.hash(&mut hasher);
+                                let inventory_update_hash = hasher.finish() as i64;
+                                let timestamp = inventory_update.get_date().unwrap();
+
+                                if let Err(e) = self.database.add_user_inventory_update_event(current_user, inventory_update_hash, timestamp.to_string(), inventory_update.payload()) {
+                                    return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-inventoryupdateevent error: {}", e.to_string()), Severity::Error)));
                                 }
-                            };
 
-                            let mut hasher = DefaultHasher::new();
-                            event.attachment.hash(&mut hasher);
-                            let collection_hash = hasher.finish() as i64;
+                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Player inventory update event received at {}", timestamp), Severity::Info)));
+                            }
+                            ParseResults::InventoryResult(inventory) => {
+                                let current_user = match self.log_user_session.as_ref() {
+                                    Some(user) => user,
+                                    None => {
+                                        return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(String::from("parser-inventoryevent error: No user session is set"), Severity::Error)));
+                                    }
+                                };
 
-                            if let Err(e) = self.database.add_user_collection_event(
-                                current_user,
-                                collection_hash,
-                                event.timestamp.clone(),
-                                event.attachment,
-                            ) {
-                                return Command::perform(
-                                    async move { format!("parser-collectionevent error: {}", e.to_string()) },
-                                    |error| TrackerMessage::Action(Action::LogMessage(error))
-                                )
-                            };
+                                let mut hasher = DefaultHasher::new();
+                                inventory.hash(&mut hasher);
+                                let inventory_hash = hasher.finish() as i64;
+                                let timestamp = inventory.get_date().unwrap();
 
-                            return Command::perform(
-                                {
-                                    let timestamp = event.timestamp.clone();
-                                    async move { format!("Collection updated at {}", timestamp) }
-                                },
-                                |message| TrackerMessage::Action(Action::LogMessage(message))
-                            );
-                        }
-                        logwatcher::LineParseResult::InventoryEvent(event) => {
-                            let current_user = match self.log_user_session.as_ref() {
-                                Some(user) => user,
-                                None => {
+                                if let Err(e) = self.database.add_user_inventory_event(
+                                    current_user,
+                                    inventory_hash,
+                                    timestamp.to_string(),
+                                    inventory.payload(),
+                                ) {
                                     return Command::perform(
-                                        async move { String::from("parser-inventoryevent error: No user session is set") },
-                                        |error| TrackerMessage::Action(Action::LogMessage(error))
-                                    )
+                                        async {},
+                                        move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-inventoryevent error: {}", e.to_string()), Severity::Error))
+                                    );
+                                };
+
+                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Player inventory event received at {}", timestamp), Severity::Info)));
+                            }
+                            ParseResults::CollectionResult(collection) => {
+                                let current_user = match self.log_user_session.as_ref() {
+                                    Some(user) => user,
+                                    None => {
+                                        return Command::perform(async {}, |_| TrackerMessage::Action(Action::LogMessage(String::from("parser-collectionevent error: No user session is set"), Severity::Error)))
+                                    },
+                                };
+
+                                let mut hasher = DefaultHasher::new();
+                                collection.payload().hash(&mut hasher);
+                                let collection_hash = hasher.finish() as i64;
+                                let timestamp = collection.get_date().unwrap();
+
+                                if let Err(e) = self.database.add_user_collection_event(current_user, collection_hash, timestamp.to_string(), collection.payload()) {
+                                    return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-collectionevent error: {}", e.to_string()), Severity::Error)));
                                 }
-                            };
 
-                            let mut hasher = DefaultHasher::new();
-                            event.hash(&mut hasher);
-                            let inventory_hash = hasher.finish() as i64;
-
-                            if let Err(e) = self.database.add_user_inventory_event(
-                                current_user,
-                                inventory_hash,
-                                event.timestamp.clone(),
-                                event.attachment,
-                            ) {
-                                return Command::perform(
-                                    async move { format!("parser-inventoryevent error: {}", e.to_string()) },
-                                    |error| TrackerMessage::Action(Action::LogMessage(error))
-                                );
-                            };
-
-                            return Command::perform(
-                                {
-                                    let timestamp = event.timestamp.clone();
-                                    async move { format!("Player inventory event received at {}", timestamp) }
-                                },
-                                |message| TrackerMessage::Action(Action::LogMessage(message)),
-                            );
-                        },
-                        logwatcher::LineParseResult::InventoryUpdateEvent(event) => {
-                            let current_user = match self.log_user_session.as_ref() {
-                                Some(user) => user,
-                                None => {
-                                    return Command::perform(
-                                        async move { String::from("parser-inventoryupdateevent error: No user session is set") },
-                                        |error| TrackerMessage::Action(Action::LogMessage(error))
-                                    )
-                                }
-                            };
-
-                            let mut hasher = DefaultHasher::new();
-                            event.hash(&mut hasher);
-                            let inventory_update_hash = hasher.finish() as i64;
-
-                            if let Err(e) = self.database.add_user_inventory_update_event(
-                                current_user,
-                                inventory_update_hash,
-                                event.timestamp.clone(),
-                                event.attachment,
-                            ) {
-                                return Command::perform(
-                                    async move { format!("parser-inventoryupdateevent error: {}", e.to_string()) },
-                                    |error| TrackerMessage::Action(Action::LogMessage(error)),
-                                );
-                            };
-
-                            return Command::perform(
-                                {
-                                    let timestamp = event.timestamp.clone();
-                                    async move { format!("Player inventory update event received at {}", timestamp) }
-                                },
-                                |message| TrackerMessage::Action(Action::LogMessage(message)),
-                            );
+                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Collection updated at {}", timestamp.to_string()), Severity::Info)));
+                            }
+                            ParseResults::SceneChangeResult(scene_change) => {
+                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Scene change from {} to {} ctx: {}", scene_change.from_scene(), scene_change.to_scene(), scene_change.context().unwrap()), Severity::Info)));
+                            }
+                            _ => {
+                                Command::none()
+                            }
+                            // ParseResults::UnknownResult(_) => todo!(),
                         }
-                    })
-                    .collect::<Vec<Command<TrackerMessage>>>();
-
+                    }).collect::<Vec<Command<TrackerMessage>>>();
                     return Command::batch(commands);
                 }
                 Err(e) => {
-                    return Command::perform(async move { e.to_string() }, |error| {
-                        TrackerMessage::Action(Action::LogMessage(error))
+                    return Command::perform(async {}, move |_| {
+                        TrackerMessage::Action(Action::LogMessage(e.to_string(), Severity::Error))
                     })
                 }
             },
+            TrackerMessage::LoggerInit(sender) => {
+                self.logger = Some(sender);
+            }
+            TrackerMessage::None(_) => {}
         }
         Command::none()
     }
@@ -393,18 +385,13 @@ impl Application for TrackerGui {
             Mode::ShowCollection => self.collection_component.view(),
         };
 
-        let content = column()
-            .push(set_selector)
-            .push(
-                container(
-                    row()
-                        .push(self.draft_summary_component.view())
-                        .push(side_view),
-                )
+        let content = column![
+            set_selector,
+            container(row![self.draft_summary_component.view(), side_view],)
                 .height(Length::Fill)
                 .width(Length::Fill),
-            )
-            .push(status_bar);
+            status_bar
+        ];
 
         container(content)
             .width(Length::Fill)
@@ -413,7 +400,16 @@ impl Application for TrackerGui {
     }
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
-        iced::time::every(Duration::from_secs(1)).map(|_| TrackerMessage::Action(Action::ParseLog))
+        Subscription::batch(vec![
+            iced::time::every(Duration::from_secs(1))
+                .map(|_| TrackerMessage::Action(Action::ParseLog)),
+            LogService::init().map(|e| match e {
+                LoggerEvent::Initialized(logger) => TrackerMessage::LoggerInit(logger),
+                LoggerEvent::Error(e) => {
+                    TrackerMessage::Action(Action::LogMessage(e, Severity::Error))
+                }
+            }),
+        ])
     }
 }
 
@@ -426,7 +422,7 @@ impl TrackerGui {
 
     pub async fn get_user_session(database_path: PathBuf) -> Result<UserSession> {
         let db = MtgaDb::new(database_path);
-        db.get_user_session(None)
+        db.get_user_session(None, None)
     }
 }
 
@@ -441,8 +437,8 @@ pub fn run(config: &ParseParams) -> Result<()> {
             //TODO: app icon icon: todo!(),
             ..Default::default()
         },
-        default_font: Some(OPEN_SANS_BOLD_FONT),
-        default_text_size: 14,
+        default_font: Font::DEFAULT,
+        default_text_size: 14.0,
         ..Default::default()
     };
 

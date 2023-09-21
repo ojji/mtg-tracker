@@ -6,8 +6,11 @@ pub mod assets;
 pub mod configuration;
 pub mod gui;
 mod logwatcher;
+pub mod logger;
 pub mod mtgadb;
 pub mod tracker;
+mod utils;
+mod parser;
 
 #[derive(Debug, Clone)]
 pub enum TrackerError {

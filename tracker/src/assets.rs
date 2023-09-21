@@ -1,4 +1,8 @@
 pub const OPEN_SANS_BOLD_FONT: &[u8] = include_bytes!("../assets/fonts/OpenSans-Bold.ttf");
+pub const LTR_SYMBOL: &[u8] = include_bytes!("../assets/symbols/ltr_62x40.png");
+pub const MOM_SYMBOL: &[u8] = include_bytes!("../assets/symbols/mom_54x40.png");
+pub const ONE_SYMBOL: &[u8] = include_bytes!("../assets/symbols/one_40x40.png");
+pub const BRO_SYMBOL: &[u8] = include_bytes!("../assets/symbols/bro_47x40.png");
 pub const DMU_SYMBOL: &[u8] = include_bytes!("../assets/symbols/dmu_36x40.png");
 pub const HBG_SYMBOL: &[u8] = include_bytes!("../assets/symbols/hbg_39x40.png");
 pub const SNC_SYMBOL: &[u8] = include_bytes!("../assets/symbols/snc_66x40.png");

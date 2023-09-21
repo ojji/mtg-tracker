@@ -1,19 +1,9 @@
-use crate::mtgadb::model::{self, AccountInfoEvent, CollectionEvent, InventoryUpdateEvent, InventoryEvent};
 use crate::Result;
 use async_std::fs::File;
 use async_std::io::prelude::SeekExt;
 use async_std::io::ReadExt;
 use async_std::path::{Path, PathBuf};
 use std::io::SeekFrom;
-
-#[derive(Debug, Clone)]
-pub enum LineParseResult {
-    None,
-    UserSession(AccountInfoEvent),
-    CollectionEvent(CollectionEvent),
-    InventoryUpdateEvent(InventoryUpdateEvent),
-    InventoryEvent(InventoryEvent),
-}
 
 #[derive(Debug, Clone)]
 pub struct LogWatcher {
@@ -55,45 +45,4 @@ impl LogWatcher {
     pub fn path(&self) -> &Path {
         self.path.as_path()
     }
-}
-
-pub async fn watch_log(watcher: LogWatcher) -> Result<(LogWatcher, Vec<LineParseResult>)> {
-    let mut watcher = watcher;
-    let content_read = String::from_utf8(watcher.read_log().await?)?;
-
-    let mut lines_read = vec![];
-    for line in content_read
-        .lines()
-        .filter(|&line| line.starts_with("[MTGADataCollector]"))
-    {
-        lines_read.push(parse_line(line).await?);
-    }
-
-    Ok((watcher, lines_read))
-}
-
-pub async fn parse_line(line: &str) -> Result<LineParseResult> {
-    const COLLECTION_PREFIX: &str = "[MTGADataCollector][collection]";
-    const INVENTORY_PREFIX: &str = "[MTGADataCollector][inventory]";
-    const INVENTORY_UPDATE_PREFIX: &str = "[MTGADataCollector][inventory-update]";
-    const ACCOUNT_INFO_PREFIX: &str = "[MTGADataCollector][account-info]";
-
-    if line.starts_with(ACCOUNT_INFO_PREFIX) {
-        let account_info: AccountInfoEvent =
-            serde_json::from_str(&line[ACCOUNT_INFO_PREFIX.len()..])?;
-        return Ok(LineParseResult::UserSession(account_info));
-    } else if line.starts_with(COLLECTION_PREFIX) {
-        let collection: CollectionEvent = serde_json::from_str(&line[COLLECTION_PREFIX.len()..])?;
-        return Ok(LineParseResult::CollectionEvent(collection));
-    } else if line.starts_with(INVENTORY_PREFIX) {
-        let inventory: model::InventoryEvent =
-            serde_json::from_str(&line[INVENTORY_PREFIX.len()..])?;
-        return Ok(LineParseResult::InventoryEvent(inventory));
-    } else if line.starts_with(INVENTORY_UPDATE_PREFIX) {
-        let inventory_update: model::InventoryUpdateEvent =
-            serde_json::from_str(&line[INVENTORY_UPDATE_PREFIX.len()..])?;
-        return Ok(LineParseResult::InventoryUpdateEvent(inventory_update));
-    }
-
-    Ok(LineParseResult::None)
 }

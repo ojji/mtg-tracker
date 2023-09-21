@@ -495,13 +495,12 @@ impl MtgaDb {
             "えすてぃお/esuthio" => "esuthio",
             "タカヤマトシアキ/toshiaki takayama" => "toshiaki takayama",
             "ロルベイ/rorubei" => "rorubei",
-            "yangyang / xiaji" => "yangygan & xiaji",
+            "yangyang / xiaji" => "yangyang & xiaji",
             "xiaji/yangyang" => "xiaji",
             "よーね/yo-ne" => "yo-ne",
             "近藤途轍/totetsu kondo" => "totetsu kondo",
             "森下直親/naochika morishita" => "naochika morishita",
             "ぴよ/piyo" => "piyo",
-            "bartłomiej gaweł" => "bartlomiej gawel",
             "浮雲宇一 / uichi ukumo" => "uichi ukumo",
             "まじ/maji" => "maji",
             "v. szendrey (cashile)" => "vi szendrey (cashile)",
@@ -568,7 +567,6 @@ impl MtgaDb {
             "ゾウノセ/zounose" => "zounose",
             "村上ヒサシ/murakami hisashi" => "murakami hisashi",
             "七片藍/ai nanahira" => "ai nanahira",
-            "martina fačková" => "martina fackova",
             "仙田聡/satoru senda" => "satoru senda",
             "前河悠一/maekawa yuichi" => "maekawa yuichi",
             "茶魔魔 / yaomojun" => "yaomojun",
@@ -581,7 +579,7 @@ impl MtgaDb {
             "夢子 / yumeko" => "yumeko",
             "奥田まがね / magane okuda" => "magane okuda",
             "クロサワテツ/tetsu kurosawa" => "tetsu kurosawa",
-            "刀 彼方/katana canata" => "katana canata",
+            "刀 彼方/katana canata" => "canata katana",
             "加藤 綾華/kato ayaka" => "kato ayaka",
             "ヨシヤ/yoshiya" => "yoshiya",
             "小島文美 / ayami kojima" => "ayami kojima",
@@ -591,6 +589,25 @@ impl MtgaDb {
             "嘉弖苅悠介 / yusuke katekari" => "yusuke katekari",
             "瞑丸イヌチヨ/inuchiyo meimaru" => "inuchiyo meimaru",
             /// FUUUUUUUUUUUUUUUUUUUUUUU "kogado studio" => ["羽山晃平", "ヨロイコウジ"],
+            "松浦健人/kento matsuura" => "kento matsuura",
+            "aldo dominguez" => "aldo domínguez",
+            "荒巻美由希/aramaki miyuki" => "miyuki aramaki",
+            " justyna dura" => "justyna dura",
+            "jean pierre targete" => "j.p. targete",
+            "nereida" => "marzena nereida piwowar",
+            "藤澤 勇希/yuki fujisawa" => "yuki fujisawa",
+            "泉 朝樹/tomoki izumi" => "izumi tomoki",
+            "田辺剛/tanabe gou" => "gou tanabe",
+            "david alvarez" => "david álvarez",
+            "shikee/シーキー" => "shikee",
+            "tomas honz" => "tomáš honz",
+            "martina fackova" => "martina fačková",
+            "iga “igsonart” oliwiak" => "iga oliwiak",
+            "西元 祐貴/yu-ki nishimoto" => "yu-ki nishimoto",
+            "ウスダヒロ/hiro usuda" => "hiro usuda",
+            "marcela bolivar" => "marcela bolívar",
+            "飯沼ゆうき/iinuma yuuki" => "iinuma yuuki",
+            "古海鐘一/showichi furumi　" => "showichi furumi",
             _ => mtga_artist_name,
         }
     }
@@ -669,26 +686,13 @@ impl MtgaDb {
 
     pub fn get_user_session(
         &self,
-        account_info: Option<model::AccountInfoData>,
+        user_id: Option<&str>,
+        screen_name: Option<&str>,
     ) -> Result<UserSession> {
         let db = Connection::open(self.db_path.as_path())?;
 
-        let user = match account_info {
-            Some(ref account_info) => db.query_row(
-                "
-                SELECT users.'user_id', users.'arena_id', users.'screen_name'
-                FROM users
-                WHERE users.'arena_id' = ?1",
-                params![account_info.user_id],
-                |row| {
-                    return Ok(UserSession {
-                        user_id: row.get(0)?,
-                        arena_id: row.get(1)?,
-                        screen_name: row.get(2)?,
-                    });
-                },
-            ),
-            None => db.query_row(
+        let user = if user_id.is_none() || screen_name.is_none() {
+            db.query_row(
                 "
                     SELECT users.'user_id', users.'arena_id', users.'screen_name'
                     FROM users
@@ -701,22 +705,34 @@ impl MtgaDb {
                         screen_name: row.get(2)?,
                     });
                 },
-            ),
+            )
+        } else {
+            db.query_row(
+                "
+                SELECT users.'user_id', users.'arena_id', users.'screen_name'
+                FROM users
+                WHERE users.'arena_id' = ?1",
+                params![user_id.unwrap()],
+                |row| {
+                    return Ok(UserSession {
+                        user_id: row.get(0)?,
+                        arena_id: row.get(1)?,
+                        screen_name: row.get(2)?,
+                    });
+                },
+            )
         };
 
         if let Err(rusqlite::Error::QueryReturnedNoRows) = user {
-            if account_info.is_some() {
+            if user_id.is_some() && screen_name.is_some() {
                 db.execute(
                     "
                         INSERT INTO users ('arena_id', 'screen_name')
                         VALUES (?1, ?2)",
-                    params![
-                        account_info.as_ref().unwrap().user_id,
-                        account_info.as_ref().unwrap().screen_name
-                    ],
+                    params![user_id.unwrap(), screen_name.unwrap()],
                 )?;
 
-                return self.get_user_session(account_info);
+                return self.get_user_session(Some(user_id.unwrap()), Some(screen_name.unwrap()));
             } else {
                 return Err("The database does not have any users.".into());
             }
@@ -752,7 +768,7 @@ impl MtgaDb {
         current_user: &UserSession,
         update_hash: i64,
         timestamp: String,
-        update: model::InventoryUpdateData,
+        update: &model::InventoryUpdateData,
     ) -> Result<bool> {
         let db = Connection::open(self.db_path.as_path())?;
         let already_inserted = match db.query_row(
@@ -816,7 +832,7 @@ impl MtgaDb {
         current_user: &UserSession,
         collection_hash: i64,
         timestamp: String,
-        collection: Vec<CollectedCard>,
+        collection: &Vec<CollectedCard>,
     ) -> Result<bool> {
         let db = Connection::open(self.db_path.as_path())?;
         let already_inserted = match db.query_row(
@@ -962,7 +978,7 @@ impl MtgaDb {
         current_user: &UserSession,
         inventory_hash: i64,
         timestamp: String,
-        inventory_data: PlayerInventoryData,
+        inventory_data: &PlayerInventoryData,
     ) -> Result<bool> {
         let db = Connection::open(self.db_path.as_path())?;
         let already_inserted = match db.query_row(
@@ -1069,8 +1085,11 @@ impl MtgaDb {
             "xln" | "rix" | "dom" | "m19" | "grn" | "rna" | "war" | "m20" | "eld" | "thb"
             | "iko" | "m21" | "stx" | "neo" => Ok((7.0 / 8.0, 1.0 / 8.0)), // 1:8
             "znr" | "khm" | "mid" | "vow" => Ok((6.4 / 7.4, 1.0 / 7.4)), // 1:7.4
-            "klr" | "afr" | "snc" | "hbg" | "dmu" => Ok((6.0 / 7.0, 1.0 / 7.0)), // 1:7
+            "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" => {
+                Ok((6.0 / 7.0, 1.0 / 7.0))
+            } // 1:7
             "akr" => Ok((5.0 / 6.0, 1.0 / 6.0)),                         // 1:6
+            "bro" => Ok((4.8 / 5.8, 1.0 / 5.8)),                         // 1:5.8
             other => Err(format!("unrecognized set name: {} in get_drop_rates()", other).into()),
         }
     }

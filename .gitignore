@@ -14,3 +14,4 @@ obj/
 
 assets/
 mtga-tracker.db
+mtga-tracker-*.db

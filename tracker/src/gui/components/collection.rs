@@ -1,8 +1,5 @@
 use async_std::path::Path;
-use iced::{
-    pure::{container, scrollable, text, widget::Column, Element},
-    Command, Length,
-};
+use iced::{Command, Length, Element, widget::{column, text, container, scrollable}};
 
 use crate::{
     gui::TrackerMessage,
@@ -24,7 +21,7 @@ impl CollectionComponent {
     {
         CollectionComponent {
             database: MtgaDb::new(database_path),
-            selected_set: String::from("dmu"),
+            selected_set: String::from("ltr"),
             display_user_session: None,
             cards: vec![],
         }
@@ -107,7 +104,7 @@ impl CollectionComponent {
     }
 
     pub fn view(&self) -> Element<TrackerMessage> {
-        let messages: Element<TrackerMessage> = Column::with_children(
+        let messages: Element<TrackerMessage> = column(
             self.cards
                 .iter()
                 .map(|msg| text(msg).size(16).into())

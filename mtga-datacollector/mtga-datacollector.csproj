@@ -10,32 +10,37 @@
 
   <ItemGroup>
     <Reference Include="UnityEngine">
-      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.dll</HintPath>
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.dll</HintPath>
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </Reference>
     <Reference Include="Assembly.CSharp">
-      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
+    <Reference Include="Wizards.Arena.Client.Logging">
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\Wizards.Arena.Client.Logging.dll</HintPath>
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </Reference>
     <Reference Include="Wizards.MDN.GreProtobuf.Unity">
-      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\Wizards.MDN.GreProtobuf.Unity.dll</HintPath>
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\Wizards.MDN.GreProtobuf.Unity.dll</HintPath>
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>f:\teljes\MTGA\MTGA_Data\Managed\Newtonsoft.Json.dll</HintPath>
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\Newtonsoft.Json.dll</HintPath>
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </Reference>

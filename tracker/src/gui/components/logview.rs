@@ -1,6 +1,6 @@
 use iced::{
-    pure::{container, scrollable, text, widget::Column, Element},
-    Length,
+    widget::{column, container, scrollable, text},
+    Element, Length,
 };
 
 use crate::gui::TrackerMessage;
@@ -19,7 +19,7 @@ impl LogViewComponent {
     }
 
     pub fn view(&self) -> Element<TrackerMessage> {
-        let messages: Element<TrackerMessage> = Column::with_children(
+        let messages: Element<TrackerMessage> = column(
             self.messages
                 .iter()
                 .map(|msg| text(msg).size(12).into())

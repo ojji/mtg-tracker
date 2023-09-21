@@ -1,13 +1,352 @@
-//! The main model types are `AccountInfoEvent`, `InventoryUpdateEvent` and `CollectionEvent`, appearing as the main JSON objects in the
-//! log file. Every main model type has a `Timestamp` and an `Attachment` field, describing when the event occured and
-//! containing the detailed event object.
+//! The main model types are `AccountInfoResult`, `InventoryUpdateResult` and `CollectionResult`, appearing as the main
+//! JSON objects in the log file. Every main model type has a `Timestamp` and an `Attachment` field, describing when the
+//! event occured and containing the detailed event object.
 use crate::Result;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 
+use chrono::NaiveDateTime;
 use rusqlite::{types::FromSql, Connection, ToSql};
 use serde::{de::Visitor, Deserialize, Serialize};
+
+pub trait ParseResult {
+    fn get_prefix(&self) -> &str;
+    fn get_content(&self) -> &str;
+    fn get_date(&self) -> &Option<NaiveDateTime>;
+    fn set_common_fields(&mut self, prefix: String, content: String, date: Option<NaiveDateTime>);
+}
+
+#[derive(Debug, Clone)]
+pub enum ParseResults {
+    UnknownResult(UnknownResult),
+    SceneChangeResult(SceneChangeResult),
+    AccountInfoResult(AccountInfoResult),
+    InventoryUpdateResult(InventoryUpdateResult),
+    InventoryResult(InventoryResult),
+    CollectionResult(CollectionResult),
+}
+
+impl ParseResult for ParseResults {
+    fn get_prefix(&self) -> &str {
+        match self {
+            ParseResults::UnknownResult(r) => r.get_prefix(),
+            ParseResults::SceneChangeResult(r) => r.get_prefix(),
+            ParseResults::AccountInfoResult(r) => r.get_prefix(),
+            ParseResults::InventoryUpdateResult(r) => r.get_prefix(),
+            ParseResults::InventoryResult(r) => r.get_prefix(),
+            ParseResults::CollectionResult(r) => r.get_prefix(),
+        }
+    }
+
+    fn get_content(&self) -> &str {
+        match self {
+            ParseResults::UnknownResult(r) => r.get_content(),
+            ParseResults::SceneChangeResult(r) => r.get_content(),
+            ParseResults::AccountInfoResult(r) => r.get_content(),
+            ParseResults::InventoryUpdateResult(r) => r.get_content(),
+            ParseResults::InventoryResult(r) => r.get_content(),
+            ParseResults::CollectionResult(r) => r.get_content(),
+        }
+    }
+
+    fn get_date(&self) -> &Option<NaiveDateTime> {
+        match self {
+            ParseResults::UnknownResult(r) => r.get_date(),
+            ParseResults::SceneChangeResult(r) => r.get_date(),
+            ParseResults::AccountInfoResult(r) => r.get_date(),
+            ParseResults::InventoryUpdateResult(r) => r.get_date(),
+            ParseResults::InventoryResult(r) => r.get_date(),
+            ParseResults::CollectionResult(r) => r.get_date(),
+
+        }
+    }
+
+    fn set_common_fields(&mut self, prefix: String, content: String, date: Option<NaiveDateTime>) {
+        match self {
+            ParseResults::UnknownResult(r) => r.set_common_fields(prefix, content, date),
+            ParseResults::SceneChangeResult(r) => r.set_common_fields(prefix, content, date),
+            ParseResults::AccountInfoResult(r) => r.set_common_fields(prefix, content, date),
+            ParseResults::InventoryUpdateResult(r) => r.set_common_fields(prefix, content, date),
+            ParseResults::InventoryResult(r) => r.set_common_fields(prefix, content, date),
+            ParseResults::CollectionResult(r) => r.set_common_fields(prefix, content, date),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct CollectionResult {
+    timestamp: String,
+    attachment: Vec<CollectedCard>,
+    #[serde(skip)]
+    prefix: String,
+    #[serde(skip)]
+    date: Option<NaiveDateTime>,
+    #[serde(skip)]
+    content: String,
+}
+
+impl CollectionResult {
+    pub fn timestamp_str(&self) -> &str {
+        &self.timestamp
+    }
+
+    pub fn payload(&self) -> &Vec<CollectedCard> {
+        &self.attachment
+    }
+}
+
+impl ParseResult for CollectionResult {
+    fn get_prefix(&self) -> &str {
+        &self.prefix
+    }
+
+    fn get_content(&self) -> &str {
+        &self.content
+    }
+
+    fn get_date(&self) -> &Option<NaiveDateTime> {
+        &self.date
+    }
+
+    fn set_common_fields(&mut self, prefix: String, content: String, date: Option<NaiveDateTime>) {
+        self.prefix = prefix;
+        self.date = date;
+        self.content = content;
+    }
+}
+
+
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct InventoryResult {
+    timestamp: String,
+    attachment: PlayerInventoryData,
+    #[serde(skip)]
+    prefix: String,
+    #[serde(skip)]
+    date: Option<NaiveDateTime>,
+    #[serde(skip)]
+    content: String,
+}
+
+impl InventoryResult {
+    pub fn timestamp_str(&self) -> &str {
+        &self.timestamp
+    }
+
+    pub fn payload(&self) -> &PlayerInventoryData {
+        &self.attachment
+    }
+}
+
+impl ParseResult for InventoryResult {
+    fn get_prefix(&self) -> &str {
+        &self.prefix
+    }
+
+    fn get_content(&self) -> &str {
+        &self.content
+    }
+
+    fn get_date(&self) -> &Option<NaiveDateTime> {
+        &self.date
+    }
+
+    fn set_common_fields(&mut self, prefix: String, content: String, date: Option<NaiveDateTime>) {
+        self.prefix = prefix;
+        self.date = date;
+        self.content = content;
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct InventoryUpdateResult {
+    timestamp: String,
+    attachment: InventoryUpdateData,
+    #[serde(skip)]
+    prefix: String,
+    #[serde(skip)]
+    date: Option<NaiveDateTime>,
+    #[serde(skip)]
+    content: String,
+}
+
+impl InventoryUpdateResult {
+    pub fn timestamp_str(&self) -> &str {
+        &self.timestamp
+    }
+
+    pub fn payload(&self) -> &InventoryUpdateData {
+        &self.attachment
+    }
+}
+
+impl ParseResult for InventoryUpdateResult {
+    fn get_prefix(&self) -> &str {
+        &self.prefix
+    }
+
+    fn get_content(&self) -> &str {
+        &self.content
+    }
+
+    fn get_date(&self) -> &Option<NaiveDateTime> {
+        &self.date
+    }
+
+    fn set_common_fields(&mut self, prefix: String, content: String, date: Option<NaiveDateTime>) {
+        self.prefix = prefix;
+        self.date = date;
+        self.content = content;
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct AccountInfoResult {
+    timestamp: String,
+    attachment: AccountInfoData,
+    #[serde(skip)]
+    prefix: String,
+    #[serde(skip)]
+    date: Option<NaiveDateTime>,
+    #[serde(skip)]
+    content: String,
+}
+
+impl AccountInfoResult {
+    pub fn timestamp_str(&self) -> &str {
+        &self.timestamp
+    }
+
+    pub fn screen_name(&self) -> &str {
+        &self.attachment.screen_name
+    }
+
+    pub fn user_id(&self) -> &str {
+        &self.attachment.user_id
+    }
+}
+
+impl ParseResult for AccountInfoResult {
+    fn get_prefix(&self) -> &str {
+        &self.prefix
+    }
+
+    fn get_content(&self) -> &str {
+        &self.content
+    }
+
+    fn get_date(&self) -> &Option<NaiveDateTime> {
+        &self.date
+    }
+
+    fn set_common_fields(&mut self, prefix: String, content: String, date: Option<NaiveDateTime>) {
+        self.prefix = prefix;
+        self.date = date;
+        self.content = content;
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountInfoData {
+    user_id: String,
+    screen_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnknownResult {
+    prefix: String,
+    content: String,
+    date: Option<NaiveDateTime>,
+}
+
+impl UnknownResult {
+    pub fn new(prefix: String, date: Option<NaiveDateTime>, content: String) -> UnknownResult {
+        UnknownResult {
+            prefix,
+            content,
+            date,
+        }
+    }
+}
+
+impl ParseResult for UnknownResult {
+    fn get_prefix(&self) -> &str {
+        &self.prefix
+    }
+
+    fn get_content(&self) -> &str {
+        &self.content
+    }
+
+    fn get_date(&self) -> &Option<NaiveDateTime> {
+        &self.date
+    }
+
+    fn set_common_fields(&mut self, prefix: String, content: String, date: Option<NaiveDateTime>) {
+        self.prefix = prefix;
+        self.content = content;
+        self.date = date;
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneChangeResult {
+    from_scene_name: String,
+    to_scene_name: String,
+    initiator: String,
+    context: Option<String>,
+    #[serde(skip)]
+    prefix: String,
+    #[serde(skip)]
+    date: Option<NaiveDateTime>,
+    #[serde(skip)]
+    content: String,
+}
+
+impl SceneChangeResult {
+    pub fn from_scene(&self) -> &str {
+        &self.from_scene_name
+    }
+
+    pub fn to_scene(&self) -> &str {
+        &self.to_scene_name
+    }
+
+    pub fn initiator(&self) -> &str {
+        &self.initiator
+    }
+
+    pub fn context(&self) -> Option<&str> {
+        self.context.as_ref().map(|x| x.as_str())
+    }
+}
+
+impl ParseResult for SceneChangeResult {
+    fn get_prefix(&self) -> &str {
+        &self.prefix
+    }
+
+    fn get_content(&self) -> &str {
+        &self.content
+    }
+
+    fn get_date(&self) -> &Option<NaiveDateTime> {
+        &self.date
+    }
+
+    fn set_common_fields(&mut self, prefix: String, content: String, date: Option<NaiveDateTime>) {
+        self.prefix = prefix;
+        self.date = date;
+        self.content = content;
+    }
+}
 
 /// # Card Objects
 /// Card objects represent individual Magic: The Gathering cards that players could obtain and add to their collection
@@ -625,83 +964,6 @@ pub struct Legality(String);
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Date(String);
 
-/// `InventoryEvent` is the outermost json object describing the player inventory parsed from the MTGA log file.
-///
-/// Example object in the json body:
-/// ```
-/// {
-///   "Timestamp": "2022-09-11T16:28:55.8865732+02:00",
-///   "Attachment": {
-///     "wcCommon": 38,
-///     "wcUncommon": 71,
-///     "wcRare": 45,
-///     "wcMythic": 30,
-///     "gold": 793775,
-///     "gems": 25080,
-///     "wcTrackPosition": 0,
-///     "vaultProgress": 27.1,
-///     "boosters": [
-///       {
-///         "collationId": 100023,
-///         "count": 65
-///       },
-///       {
-///         "collationId": 100024,
-///         "count": 51
-///       },
-///       {
-///         "collationId": 100025,
-///         "count": 50
-///       },
-///       {
-///         "collationId": 100026,
-///         "count": 58
-///       },
-///       {
-///         "collationId": 400026,
-///         "count": 9
-///       },
-///       {
-///         "collationId": 100027,
-///         "count": 53
-///       },
-///       {
-///         "collationId": 100028,
-///         "count": 40
-///       },
-///       {
-///         "collationId": 400028,
-///         "count": 6
-///       },
-///       {
-///         "collationId": 100029,
-///         "count": 37
-///       },
-///       {
-///         "collationId": 100030,
-///         "count": 15
-///       }
-///     ],
-///     "vouchers": [],
-///     "basicLandSet": null,
-///     "latestBasicLandSet": null,
-///     "starterDecks": null,
-///     "tickets": null,
-///     "CustomTokens": {
-///       "DraftToken": 19
-///     },
-///     "draftTokens": 19,
-///     "sealedTokens": 0
-///   }
-/// }
-/// ```
-#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct InventoryEvent {
-    pub timestamp: String,
-    pub attachment: PlayerInventoryData,
-}
-
 /// `PlayerInventoryData` contains what the player has in their inventory - wildcards, booster packs, draft tokens etc.
 ///
 /// Example object in the json body:
@@ -847,51 +1109,6 @@ impl Hash for ClientVoucherDescription {
         }
         self.available_date.hash(state);
     }
-}
-
-/// `InventoryUpdateEvent` is the outermost json object describing an inventory update event parsed from the log file.
-///
-/// Example object in the json body:
-/// ```
-/// {
-///   "Timestamp": "2022-09-11T17:00:35.9879457+02:00",
-///   "Attachment": {
-///     "delta": {
-///       "gemsDelta": 0,
-///       "goldDelta": 100,
-///       "boosterDelta": [],
-///       "cardsAdded": [],
-///       "decksAdded": [],
-///       "starterDecksAdded": null,
-///       "vanityItemsAdded": [],
-///       "vanityItemsRemoved": null,
-///       "vaultProgressDelta": 0,
-///       "wcTrackPosition": 0,
-///       "wcCommonDelta": 0,
-///       "wcUncommonDelta": 0,
-///       "wcRareDelta": 0,
-///       "wcMythicDelta": 0,
-///       "artSkinsAdded": [],
-///       "artSkinsRemoved": null,
-///       "voucherItemsDelta": [],
-///       "tickets": null,
-///       "customTokenDelta": []
-///     },
-///     "aetherizedCards": [],
-///     "xpGained": 25,
-///     "context": {
-///       "source": "DailyWins",
-///       "sourceId": null
-///     },
-///     "parentcontext": null
-///   }
-/// }
-/// ```
-#[derive(Debug, Serialize, Deserialize, Hash, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct InventoryUpdateEvent {
-    pub timestamp: String,
-    pub attachment: InventoryUpdateData,
 }
 
 /// `InventoryUpdateData` is emitted when an update happens to the player inventory eg. when a match ends.
@@ -1172,6 +1389,13 @@ impl BoosterStack {
             100028 => String::from("snc"),
             100029 => String::from("hbg"),
             100030 => String::from("dmu"),
+            100031 => String::from("bro"),
+            100032 => String::from("one"),
+            100033 => String::from("sir"),
+            100037 => String::from("mom"),
+            100038 => String::from("mat"),
+            100039 => String::from("ltr"),
+            100040 => String::from("woe"),
             200001 => String::from("kld_draft"),
             200002 => String::from("aer_draft"),
             200003 => String::from("akh_draft"),
@@ -1200,6 +1424,16 @@ impl BoosterStack {
             200028 => String::from("snc_draft"),
             200029 => String::from("hbg_draft"),
             200030 => String::from("dmu_draft"),
+            200031 => String::from("bro_draft"),
+            200032 => String::from("one_draft"),
+            200033 => String::from("sir_bonus_typal"),
+            200034 => String::from("sir_bonus_flashback"),
+            200035 => String::from("sir_bonus_morbid"),
+            200036 => String::from("sir_bonus_allstar"),
+            200037 => String::from("mom_draft"),
+            200038 => String::from("mat_draft"),
+            200039 => String::from("ltr_draft"),
+            200040 => String::from("woe_draft"),
             300000 => String::from("cube"),
             300001 => String::from("tinkererscube"),
             300002 => String::from("chromaticcube"),
@@ -1213,6 +1447,8 @@ impl BoosterStack {
             400027 => String::from("y22_neo"),
             400028 => String::from("y22_snc"),
             400030 => String::from("y23_dmu"),
+            400031 => String::from("y23_bro"),
+            400032 => String::from("y23_one"),
             500000 => String::from("mythic"),
             500015 => String::from("eld_mythic"),
             500016 => String::from("thb_mythic"),
@@ -1228,18 +1464,22 @@ impl BoosterStack {
             500028 => String::from("snc_mythic"),
             500029 => String::from("hbg_mythic"),
             500030 => String::from("dmu_mythic"),
+            500031 => String::from("bro_mythic"),
+            500032 => String::from("one_mythic"),
+            500033 => String::from("sir_mythic"),
+            500037 => String::from("mom_mythic"),
+            500039 => String::from("ltr_mythic"),
+            500040 => String::from("woe_mythic"),
+            600028 => String::from("y22_snc_draft"),
+            600030 => String::from("y23_dmu_draft"),
+            600031 => String::from("y23_bro_draft"),
+            600032 => String::from("y23_one_draft"),
             700028 => String::from("snc_rebalanced"),
+            900980 => String::from("goldenpack"),
             999999 => String::from("futuresetplaceholder"),
             _ => String::from("unknown"),
         }
     }
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct CollectionEvent {
-    pub timestamp: String,
-    pub attachment: Vec<CollectedCard>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Hash, Clone)]
@@ -1519,20 +1759,6 @@ impl Display for TrackerCard {
             self.name, self.set, self.collector_number, self.arena_id, self.rarity
         )
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct AccountInfoEvent {
-    pub timestamp: String,
-    pub attachment: AccountInfoData,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct AccountInfoData {
-    pub user_id: String,
-    pub screen_name: String,
 }
 
 #[derive(Debug, Clone)]

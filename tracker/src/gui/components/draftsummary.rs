@@ -1,14 +1,13 @@
 use async_std::path::Path;
 use iced::{
     alignment::Horizontal,
-    pure::{
-        column, container, horizontal_space, row, text, vertical_space, widget::Container, Element,
-    },
-    Command, Length,
+    widget::column,
+    widget::{container, horizontal_space, row, text, vertical_space},
+    Command, Element, Length,
 };
 
 use crate::{
-    gui::{style, TrackerMessage},
+    gui::TrackerMessage,
     mtgadb::{DraftDetails, MtgaDb, UserSession},
     Result,
 };
@@ -224,7 +223,7 @@ impl DraftSummaryComponent {
     {
         DraftSummaryComponent {
             database: MtgaDb::new(database_path),
-            selected_set: String::from("dmu"),
+            selected_set: String::from("ltr"),
             display_user_session: None,
             model: DraftSummaryModel::default(),
         }
@@ -254,386 +253,265 @@ impl DraftSummaryComponent {
     pub fn view(&self) -> Element<TrackerMessage> {
         let model = &self.model;
         let set_name = self.selected_set.to_uppercase();
-        let rares_summary = container(
-            column()
-                .push(
-                    container(text(format!("{} RARES", set_name)).size(24))
-                        .width(Length::Fill)
-                        .center_x(),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Rare wildcards (R):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.rare_wc_owned().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text(format!("{} Packs Owned (P):", set_name)).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.packs_owned().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text(format!("{} Rares Owned (R):", set_name)).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.rares_owned().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Rares per Draft (N):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(format!("{:.2}", model.rares_per_draft())).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Packs per Draft (W):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(format!("{:.2}", model.packs_per_draft())).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Critical Point (drafts):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(
-                                text(format!("{:.2}", model.rares_critical_point())).size(20),
-                            )
-                            .padding(5)
-                            .width(Length::FillPortion(25))
-                            .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(vertical_space(Length::Units(25)))
-                .push(
-                    row()
-                        .push(
-                            container(text("Rares needed:").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.rares_needed().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                ),
-        )
-        .style(style::DraftSummaryPanel)
-        .width(Length::Units(275));
 
-        let mythics_summary = container(
-            column()
-                .push(
-                    container(text(format!("{} MYTHICS", set_name)).size(24))
-                        .width(Length::Fill)
-                        .center_x(),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Mythic wildcards (M):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.mythic_wc_owned().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text(format!("{} Packs Owned (P):", set_name)).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.packs_owned().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text(format!("{} Mythics Owned (M):", set_name)).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.mythics_owned().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Mythics per Draft (N):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(format!("{:.2}", model.mythics_per_draft())).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Packs per Draft (W):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(format!("{:.2}", model.packs_per_draft())).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Critical Point (drafts):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(
-                                text(format!("{:.2}", model.mythics_critical_point())).size(20),
-                            )
-                            .padding(5)
-                            .width(Length::FillPortion(25))
-                            .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(vertical_space(Length::Units(25)))
-                .push(
-                    row()
-                        .push(
-                            container(text("Mythics needed:").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(75))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.mythics_needed().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(25))
-                                .align_x(Horizontal::Center),
-                        ),
-                ),
-        )
-        .style(style::DraftSummaryPanel)
-        .width(Length::Units(275));
+        let rares_summary = container(column![
+            container(text(format!("{} RARES", set_name)).size(24))
+                .width(Length::Fill)
+                .center_x(),
+            row![
+                container(text("Rare wildcards (R):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(model.rare_wc_owned().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text(format!("{} Packs Owned (P):", set_name)).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(model.packs_owned().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text(format!("{} Rares Owned (R):", set_name)).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(model.rares_owned().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Rares per Draft (N):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.rares_per_draft())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Packs per Draft (W):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.packs_per_draft())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Critical Point (drafts):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.rares_critical_point())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            vertical_space(Length::Fixed(25.0)),
+            row![
+                container(text("Rares needed:").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(model.rares_needed().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+        ])
+        // .style(style::DraftSummaryPanel)
+        .width(Length::Fixed(275.0));
 
-        let general_stats: Container<TrackerMessage> = container(
-            column()
-                .push(
-                    container(text(format!("{} STATS", set_name)).size(24))
-                        .width(Length::Fill)
-                        .center_x(),
+        let mythics_summary = container(column![
+            container(text(format!("{} MYTHICS", set_name)).size(24))
+                .width(Length::Fill)
+                .center_x(),
+            row![
+                container(text("Mythic wildcards (M):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(model.mythic_wc_owned().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text(format!("{} Packs Owned (P):", set_name)).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(model.packs_owned().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text(format!("{} Mythics Owned (M):", set_name)).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(model.mythics_owned().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Mythics per Draft (N):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.mythics_per_draft())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Packs per Draft (W):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.packs_per_draft())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Critical Point (drafts):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.mythics_critical_point())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+            vertical_space(Length::Fixed(25.0)),
+            row![
+                container(text("Mythics needed:").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(75))
+                    .align_x(Horizontal::Right),
+                container(text(model.mythics_needed().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(25))
+                    .align_x(Horizontal::Center),
+            ],
+        ])
+        // .style(style::DraftSummaryPanel)
+        .width(Length::Fixed(275.0));
+
+        let general_stats = container(column![
+            container(text(format!("{} STATS", set_name)).size(24))
+                .width(Length::Fill)
+                .center_x(),
+            row![
+                container(text("Avg Wins:").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(65))
+                    .align_x(Horizontal::Right),
+                container(
+                    text(format!(
+                        "{:.2} ({:.2})",
+                        model.avg_wins().0,
+                        model.avg_wins().1
+                    ))
+                    .size(20),
                 )
-                .push(
-                    row()
-                        .push(
-                            container(text("Avg Wins:").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(65))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(
-                                text(format!(
-                                    "{:.2} ({:.2})",
-                                    model.avg_wins().0,
-                                    model.avg_wins().1
-                                ))
-                                .size(20),
-                            )
-                            .padding(5)
-                            .width(Length::FillPortion(35))
-                            .align_x(Horizontal::Center),
-                        )
-                        .push(horizontal_space(Length::Units(50)))
-                        .push(
-                            container(text("Total Spent (gems):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(65))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.gems_spent_total().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(35))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Win %:").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(65))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(format!("{:.2}", model.win_percentage())).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(35))
-                                .align_x(Horizontal::Center),
-                        )
-                        .push(horizontal_space(Length::Units(50)))
-                        .push(
-                            container(text("Cost per Pack (gems):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(65))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(format!("{:.2}", model.gems_cost_per_pack())).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(35))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Drafts completed:").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(65))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.drafts_completed().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(35))
-                                .align_x(Horizontal::Center),
-                        )
-                        .push(horizontal_space(Length::Units(50)))
-                        .push(
-                            container(text("Total Spent (gold):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(65))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(model.gold_spent_total().to_string()).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(35))
-                                .align_x(Horizontal::Center),
-                        ),
-                )
-                .push(
-                    row()
-                        .push(
-                            container(text("Mythics & Rares from drafts:").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(65))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(
-                                text(model.mythics_and_rares_from_drafts().to_string()).size(20),
-                            )
-                            .padding(5)
-                            .width(Length::FillPortion(35))
-                            .align_x(Horizontal::Center),
-                        )
-                        .push(horizontal_space(Length::Units(50)))
-                        .push(
-                            container(text("Cost per Pack (gold):").size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(65))
-                                .align_x(Horizontal::Right),
-                        )
-                        .push(
-                            container(text(format!("{:.2}", model.gold_cost_per_pack())).size(20))
-                                .padding(5)
-                                .width(Length::FillPortion(35))
-                                .align_x(Horizontal::Center),
-                        ),
-                ),
-        )
-        .style(style::DraftSummaryPanel)
-        .width(Length::Units(600));
+                .padding(5)
+                .width(Length::FillPortion(35))
+                .align_x(Horizontal::Center),
+                horizontal_space(Length::Fixed(50.0)),
+                container(text("Total Spent (gems):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(65))
+                    .align_x(Horizontal::Right),
+                container(text(model.gems_spent_total().to_string()).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(35))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Win %:").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(65))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.win_percentage())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(35))
+                    .align_x(Horizontal::Center),
+                horizontal_space(Length::Fixed(50.0)),
+                container(text("Cost per Pack (gems):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(65))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.gems_cost_per_pack())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(35))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Win %:").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(65))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.win_percentage())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(35))
+                    .align_x(Horizontal::Center),
+                horizontal_space(Length::Fixed(50.0)),
+                container(text("Cost per Pack (gems):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(65))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.gems_cost_per_pack())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(35))
+                    .align_x(Horizontal::Center),
+            ],
+            row![
+                container(text("Mythics & Rares from drafts:").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(65))
+                    .align_x(Horizontal::Right),
+                container(text(model.mythics_and_rares_from_drafts().to_string()).size(20),)
+                    .padding(5)
+                    .width(Length::FillPortion(35))
+                    .align_x(Horizontal::Center),
+                horizontal_space(Length::Fixed(50.0)),
+                container(text("Cost per Pack (gold):").size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(65))
+                    .align_x(Horizontal::Right),
+                container(text(format!("{:.2}", model.gold_cost_per_pack())).size(20))
+                    .padding(5)
+                    .width(Length::FillPortion(35))
+                    .align_x(Horizontal::Center),
+            ]
+        ])
+        .width(Length::Fixed(600.0));
 
         let draft_summary = container(
-            column()
-                .push(row().push(rares_summary).push(mythics_summary).spacing(50))
-                .push(general_stats)
-                .spacing(20),
+            column![
+                row![rares_summary, mythics_summary].spacing(50),
+                general_stats
+            ]
+            .spacing(20),
         )
         .padding(20);
 
-        let draft_panel_content = column().push(draft_summary);
-
+        let draft_panel_content = column![draft_summary];
         container(draft_panel_content).into()
     }
 }
