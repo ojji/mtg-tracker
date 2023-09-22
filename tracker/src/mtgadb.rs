@@ -580,6 +580,7 @@ impl MtgaDb {
             "奥田まがね / magane okuda" => "magane okuda",
             "クロサワテツ/tetsu kurosawa" => "tetsu kurosawa",
             "刀 彼方/katana canata" => "canata katana",
+            "刀彼方/canata katana" => "canata katana",
             "加藤 綾華/kato ayaka" => "kato ayaka",
             "ヨシヤ/yoshiya" => "yoshiya",
             "小島文美 / ayami kojima" => "ayami kojima",
@@ -608,6 +609,17 @@ impl MtgaDb {
             "marcela bolivar" => "marcela bolívar",
             "飯沼ゆうき/iinuma yuuki" => "iinuma yuuki",
             "古海鐘一/showichi furumi　" => "showichi furumi",
+            "大熊まい/mai okuma" => "mai okuma",
+            "qianjiao ma" => "qianhao ma",
+            "やこたこす/yakotakos" => "yakotakos",
+            "ジゼロ/zizero" => "zizero",
+            "呉々/kuregure" => "kuregure",
+            "ボダックス/bodax" => "bodax",
+            "村上ゆいち/yuichi murakami" => "yuichi murakami",
+            "辰馬大助/daisuke tatsuma" => "daisuke tatsuma",
+            "じんてつ/jintetsu" => "jintetsu",
+            "heonhwa" => "heonhwa choe",
+            "結暉ゆち/yuchi yuki" => "yuchi yuki",
             _ => mtga_artist_name,
         }
     }
@@ -1085,7 +1097,7 @@ impl MtgaDb {
             "xln" | "rix" | "dom" | "m19" | "grn" | "rna" | "war" | "m20" | "eld" | "thb"
             | "iko" | "m21" | "stx" | "neo" => Ok((7.0 / 8.0, 1.0 / 8.0)), // 1:8
             "znr" | "khm" | "mid" | "vow" => Ok((6.4 / 7.4, 1.0 / 7.4)), // 1:7.4
-            "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" => {
+            "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" | "woe" => {
                 Ok((6.0 / 7.0, 1.0 / 7.0))
             } // 1:7
             "akr" => Ok((5.0 / 6.0, 1.0 / 6.0)),                         // 1:6

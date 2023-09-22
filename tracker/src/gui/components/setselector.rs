@@ -28,12 +28,18 @@ pub enum Interaction {
 impl SetSelectorComponent {
     pub fn new() -> SetSelectorComponent {
         SetSelectorComponent {
-            set_selected: String::from("ltr"),
+            set_selected: String::from("woe"),
         }
     }
 
     pub fn view(&self) -> Element<TrackerMessage> {
         let sets = vec![
+            (
+                "woe",
+                WOE_SYMBOL,
+                Length::Fixed(28.0),
+                "Wilds of Eldraine - WOE",
+            ),
             (
                 "ltr",
                 LTR_SYMBOL,
