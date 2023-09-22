@@ -1,8 +1,8 @@
-use crate::gui::{Action, TrackerMessage};
+use crate::gui::{style::text::TextStyle, Action, Element, TrackerMessage};
 use iced::{
     alignment::Vertical,
     widget::{button, container, row, text},
-    Alignment, Color, Element, Length,
+    Alignment, Length,
 };
 
 pub struct InjectBarComponent {
@@ -33,12 +33,9 @@ impl InjectBarComponent {
             .on_press(TrackerMessage::Action(Action::SwitchView));
 
         let inject_status_text = match &self.status {
-            Status::Ok(value) => text(value)
-                .style(iced::theme::Text::Default)
-                .vertical_alignment(Vertical::Center),
+            Status::Ok(value) => text(value).vertical_alignment(Vertical::Center),
             Status::Error(e) => text(e)
-                // .color([1.0, 0.0, 0.0])
-                .style(iced::theme::Text::Color(Color::from_rgb(1.0, 0.0, 0.0)))
+                .style(TextStyle::Error)
                 .vertical_alignment(Vertical::Center),
         };
 

@@ -2,13 +2,13 @@ mod components;
 mod style;
 
 use std::collections::hash_map::DefaultHasher;
+use std::env;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
-use std::env;
 
 use async_std::path::PathBuf;
 use iced::widget::{column, container, row};
-use iced::{executor, Application, Command, Element, Font, Length, Settings, Theme};
+use iced::{executor, Application, Command, Font, Length, Settings};
 use iced_futures::Subscription;
 use injector::Injector;
 
@@ -28,6 +28,7 @@ use components::{
     injectbar::{InjectBarComponent, Status},
     logview::LogViewComponent,
     setselector::{SetSelectorComponent, SetSelectorMessage},
+    Element,
 };
 
 use style::TrackerTheme;
@@ -92,7 +93,7 @@ impl Application for TrackerGui {
     type Executor = executor::Default;
     type Message = TrackerMessage;
     type Flags = TrackerGuiConfig;
-    type Theme = Theme;
+    type Theme = TrackerTheme;
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let log_path: PathBuf = if cfg!(windows) {
@@ -437,8 +438,13 @@ pub fn run(config: &ParseParams) -> Result<()> {
             //TODO: app icon icon: todo!(),
             ..Default::default()
         },
-        default_font: Font::DEFAULT,
-        default_text_size: 14.0,
+        default_font: Font {
+            family: iced::font::Family::SansSerif,
+            weight: iced::font::Weight::Bold,
+            stretch: iced::font::Stretch::Normal,
+            monospaced: false,
+        },
+        default_text_size: 11.0,
         ..Default::default()
     };
 

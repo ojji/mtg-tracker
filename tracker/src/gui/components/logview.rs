@@ -1,9 +1,9 @@
 use iced::{
     widget::{column, container, scrollable, text},
-    Element, Length,
+    Length,
 };
 
-use crate::gui::TrackerMessage;
+use crate::gui::{Element, TrackerMessage};
 
 pub struct LogViewComponent {
     messages: Vec<String>,

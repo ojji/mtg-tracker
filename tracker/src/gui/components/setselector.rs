@@ -1,11 +1,14 @@
 use iced::{
     widget::{button, container, image, row, tooltip, tooltip::Position},
-    Alignment, Command, Element, Length,
+    Alignment, Command, Length,
 };
 
 use crate::{
     assets::*,
-    gui::{Action, TrackerMessage},
+    gui::{
+        style::{button::ButtonStyle, container::ContainerStyle},
+        Action, Element, TrackerMessage,
+    },
 };
 
 pub struct SetSelectorComponent {
@@ -185,42 +188,23 @@ impl SetSelectorComponent {
                 "Amonkhet Remastered - AKR",
             ),
         ];
-        // let mut buttons_row = row();
-        // for (set, symbol, height, tooltip_text) in sets {
-        //     let i = image(iced::widget::image::Handle::from_memory(symbol.to_vec())).height(height);
-        //     let b = button(container(i))
-        //         .on_press(TrackerMessage::SetSelector(
-        //             SetSelectorMessage::Interaction(Interaction::SetSelected(String::from(set))),
-        //         ))
-        //         .height(height);
-
-        //     let t = tooltip(b, tooltip_text, Position::FollowCursor)
-        //         .gap(5)
-        //         .style(style::TooltipStyle);
-
-        //     buttons_row = buttons_row.push(t);
-        // }
-
-        // buttons_row = buttons_row
-        //     .spacing(8)
-        //     .padding(5)
-        //     .align_items(Alignment::Center);
 
         let buttons_row = row(sets
             .iter()
             .map(|(set, symbol, height, tooltip_text)| {
-                let i =
-                    image(iced::widget::image::Handle::from_memory(symbol.to_vec())).height(*height);
+                let i = image(iced::widget::image::Handle::from_memory(symbol.to_vec()))
+                    .height(*height);
                 let b = button(container(i))
                     .on_press(TrackerMessage::SetSelector(
                         SetSelectorMessage::Interaction(Interaction::SetSelected(String::from(
                             *set,
                         ))),
                     ))
+                    .style(ButtonStyle::SetSelector)
                     .height(*height);
                 let t = tooltip(b, tooltip_text, Position::FollowCursor)
-                    .gap(5);
-                    // .style(style::TooltipStyle);
+                    .gap(5)
+                    .style(ContainerStyle::Tooltip);
                 t.into()
             })
             .collect())

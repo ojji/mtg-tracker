@@ -1,8 +1,8 @@
 use async_std::path::Path;
-use iced::{Command, Length, Element, widget::{column, text, container, scrollable}};
+use iced::{Command, Length, widget::{column, text, container, scrollable}};
 
 use crate::{
-    gui::TrackerMessage,
+    gui::{TrackerMessage, Element},
     mtgadb::{MtgaDb, UserSession},
     Result,
 };

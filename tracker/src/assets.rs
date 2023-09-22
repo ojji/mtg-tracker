@@ -1,4 +1,3 @@
-pub const OPEN_SANS_BOLD_FONT: &[u8] = include_bytes!("../assets/fonts/OpenSans-Bold.ttf");
 pub const LTR_SYMBOL: &[u8] = include_bytes!("../assets/symbols/ltr_62x40.png");
 pub const MOM_SYMBOL: &[u8] = include_bytes!("../assets/symbols/mom_54x40.png");
 pub const ONE_SYMBOL: &[u8] = include_bytes!("../assets/symbols/one_40x40.png");
