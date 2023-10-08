@@ -303,7 +303,7 @@ impl Application for TrackerGui {
                                     return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-inventoryupdateevent error: {}", e.to_string()), Severity::Error)));
                                 }
 
-                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Player inventory update event received at {}", timestamp), Severity::Info)));
+                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Player inventory update event received at {}\n`{}`", timestamp, inventory_update.get_content()), Severity::Info)));
                             }
                             ParseResults::InventoryResult(inventory) => {
                                 let current_user = match self.log_user_session.as_ref() {

@@ -1,9 +1,12 @@
 use async_std::path::Path;
-use iced::{Command, Length, widget::{column, text, container, scrollable}};
+use iced::{
+    widget::{column, container, scrollable, text},
+    Command, Length,
+};
 
 use crate::{
-    gui::{TrackerMessage, Element},
-    mtgadb::{MtgaDb, UserSession},
+    gui::{Element, TrackerMessage},
+    mtgadb::{model::TrackerCard, MtgaDb, UserSession},
     Result,
 };
 
@@ -11,7 +14,7 @@ pub struct CollectionComponent {
     database: MtgaDb,
     selected_set: String,
     display_user_session: Option<UserSession>,
-    cards: Vec<String>,
+    cards: Vec<(TrackerCard, u32)>,
 }
 
 impl CollectionComponent {
@@ -38,31 +41,6 @@ impl CollectionComponent {
     }
 
     fn update_state(&mut self) -> Result<Command<TrackerMessage>> {
-        let common_cards = self
-            .database
-            .get_common_cards_in_boosters(&self.selected_set)?;
-        let uncommon_cards = self
-            .database
-            .get_uncommon_cards_in_boosters(&self.selected_set)?;
-        let mythic_cards = self
-            .database
-            .get_mythic_cards_in_boosters(&self.selected_set)?;
-        let rare_cards = self
-            .database
-            .get_rare_cards_in_boosters(&self.selected_set)?;
-        let log_message = format!(
-            "There are {} ({}) common, {} ({}) uncommon, {} ({}) rare, {} ({}) mythic cards in {}.",
-            common_cards.len(),
-            common_cards.len() * 4,
-            uncommon_cards.len(),
-            uncommon_cards.len() * 4,
-            rare_cards.len(),
-            rare_cards.len() * 4,
-            mythic_cards.len(),
-            mythic_cards.len() * 4,
-            &self.selected_set
-        );
-
         let user_id = match self.display_user_session.as_ref() {
             Some(user) => user.user_id(),
             None => return Err("Display user has not been set".into()),
@@ -91,11 +69,10 @@ impl CollectionComponent {
         collected_mythic_cards.sort_by(|a, b| a.0.name().partial_cmp(b.0.name()).unwrap());
 
         let cards = collected_common_cards
-            .iter()
-            .chain(collected_uncommon_cards.iter())
-            .chain(collected_rare_cards.iter())
-            .chain(collected_mythic_cards.iter())
-            .map(|c| format!("{}/4 - {}", c.1, c.0.to_string()))
+            .into_iter()
+            .chain(collected_uncommon_cards.into_iter())
+            .chain(collected_rare_cards.into_iter())
+            .chain(collected_mythic_cards.into_iter())
             .collect();
 
         self.cards = cards;
@@ -107,7 +84,7 @@ impl CollectionComponent {
         let messages: Element<TrackerMessage> = column(
             self.cards
                 .iter()
-                .map(|msg| text(msg).size(16).into())
+                .map(|c| card_row_container(&c.0, c.1))
                 .collect::<Vec<Element<_>>>(),
         )
         .width(Length::Fill)
@@ -122,4 +99,15 @@ impl CollectionComponent {
 
         container(scrollable_messages).into()
     }
+}
+
+fn card_row_container(card: &TrackerCard, number_collected: u32) -> Element<TrackerMessage> {
+    text(format!(
+        "{}/{} {}",
+        number_collected,
+        card.max_collected(),
+        card.to_string()
+    ))
+    .size(16)
+    .into()
 }

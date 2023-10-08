@@ -1261,7 +1261,8 @@ pub struct AetherizedCardInformation {
     pub vault_progress: HashableF64,
     pub gold_awarded: i32,
     pub gems_awarded: i32,
-    pub set: String,
+    // This is `None` for wildcards opened in boosters
+    pub set: Option<String>,
 }
 
 /// The context object for an inventory update.
@@ -1516,6 +1517,7 @@ pub struct MtgaCard {
     art_id: u32,
     collector_number: String,
     linked_face_type: String,
+    max_collected: u32,
 
     #[serde(default)]
     scry_uri: Uri,
@@ -1553,6 +1555,10 @@ impl MtgaCard {
     pub fn is_collectible(&self) -> bool {
         self.is_collectible
     }
+
+    pub fn max_collected(&self) -> u32 {
+        self.max_collected
+    }
 }
 
 #[derive(Debug)]
@@ -1566,6 +1572,7 @@ pub struct TrackerCard {
     rarity: String,
     in_booster: bool,
     is_alchemy_card: bool,
+    max_collected: u32,
 }
 
 impl TrackerCard {
@@ -1580,6 +1587,7 @@ impl TrackerCard {
             rarity: String::from(scry_card.rarity()),
             in_booster: scry_card.booster(),
             is_alchemy_card: (mtga_card.rebalanced_card_link != 0 && mtga_card.is_rebalanced),
+            max_collected: mtga_card.max_collected(),
         }
     }
 
@@ -1615,6 +1623,10 @@ impl TrackerCard {
         self.collector_number.as_ref()
     }
 
+    pub fn max_collected(&self) -> u32 {
+        self.max_collected
+    }
+
     pub fn get_by_id(db: &Connection, arena_id: u32) -> Result<TrackerCard> {
         let mut stmt = db.prepare(
             "SELECT cards_db.'name',
@@ -1625,7 +1637,8 @@ impl TrackerCard {
                         cards_db.'image_uri',
                         cards_db.'rarity',
                         cards_db.'in_booster',
-                        cards_db.'is_alchemy_card'
+                        cards_db.'is_alchemy_card',
+                        cards_db.'max_collected'
                 FROM cards_db
                 WHERE cards_db.'arena_id' = ?1",
         )?;
@@ -1642,6 +1655,7 @@ impl TrackerCard {
                 rarity: row.get(6)?,
                 in_booster: row.get(7)?,
                 is_alchemy_card: row.get(8)?,
+                max_collected: row.get(9)?,
             };
             return Ok(card);
         } else {
@@ -1661,7 +1675,8 @@ impl TrackerCard {
                         cards_db.'image_uri',
                         cards_db.'rarity',
                         cards_db.'in_booster',
-                        cards_db.'is_alchemy_card'
+                        cards_db.'is_alchemy_card',
+                        cards_db.'max_collected'
                 FROM cards_db",
         )?;
 
@@ -1675,6 +1690,7 @@ impl TrackerCard {
             let rarity = row.get(6)?;
             let in_booster = row.get(7)?;
             let is_alchemy_card = row.get(8)?;
+            let max_collected = row.get(9)?;
 
             Ok(TrackerCard {
                 name,
@@ -1686,6 +1702,7 @@ impl TrackerCard {
                 rarity,
                 in_booster,
                 is_alchemy_card,
+                max_collected,
             })
         })?;
 
@@ -1709,7 +1726,8 @@ impl TrackerCard {
                         cards_db.'image_uri',
                         cards_db.'rarity',
                         cards_db.'in_booster',
-                        cards_db.'is_alchemy_card'
+                        cards_db.'is_alchemy_card',
+                        cards_db.'max_collected'
                 FROM cards_db
                 WHERE cards_db.'set' = ?1",
         )?;
@@ -1724,6 +1742,7 @@ impl TrackerCard {
             let rarity = row.get(6)?;
             let in_booster = row.get(7)?;
             let is_alchemy_card = row.get(8)?;
+            let max_collected = row.get(9)?;
 
             Ok(TrackerCard {
                 name,
@@ -1735,6 +1754,7 @@ impl TrackerCard {
                 rarity,
                 in_booster,
                 is_alchemy_card,
+                max_collected,
             })
         })?;
 

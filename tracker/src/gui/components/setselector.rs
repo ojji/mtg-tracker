@@ -196,18 +196,18 @@ impl SetSelectorComponent {
         ];
 
         let buttons_row = row(sets
-            .iter()
+            .into_iter()
             .map(|(set, symbol, height, tooltip_text)| {
                 let i = image(iced::widget::image::Handle::from_memory(symbol.to_vec()))
-                    .height(*height);
+                    .height(height);
                 let b = button(container(i))
                     .on_press(TrackerMessage::SetSelector(
                         SetSelectorMessage::Interaction(Interaction::SetSelected(String::from(
-                            *set,
+                            set,
                         ))),
                     ))
                     .style(ButtonStyle::SetSelector)
-                    .height(*height);
+                    .height(height);
                 let t = tooltip(b, tooltip_text, Position::FollowCursor)
                     .gap(5)
                     .style(ContainerStyle::Tooltip);

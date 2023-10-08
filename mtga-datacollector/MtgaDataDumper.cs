@@ -110,6 +110,7 @@ namespace mtga_datacollector
                 artId = card.ArtId,
                 collectorNumber = NormalizeCollectorNumber(card, card.CollectorNumber),
                 linkedFaceType = card.LinkedFaceType.ToString(),
+                maxCollected = card.MaxCollected,
               };
               if (!string.IsNullOrWhiteSpace(cardData.name))
               {

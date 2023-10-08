@@ -21,5 +21,6 @@ namespace mtga_datacollector
     public uint artId;
     public string collectorNumber;
     public string linkedFaceType;
+    public uint maxCollected;
   }
 }

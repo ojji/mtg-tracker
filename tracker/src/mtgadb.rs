@@ -197,7 +197,8 @@ impl MtgaDb {
                 'image_uri' TEXT NOT NULL,
                 'rarity' TEXT NOT NULL,
                 'in_booster' INTEGER NOT NULL,
-                'is_alchemy_card' INTEGER NOT NULL
+                'is_alchemy_card' INTEGER NOT NULL,
+                'max_collected' INTEGER NOT NULL
             )",
             [],
         )?;
@@ -212,8 +213,8 @@ impl MtgaDb {
         for (&_, &(mtga_card, scry_card)) in mapped_cards {
             let tracker_card = TrackerCard::new(mtga_card, scry_card);
             tx.execute("INSERT INTO cards_db
-                    ('name', 'set', 'collector_number', 'scry_uri', 'arena_id', 'image_uri', 'rarity', 'in_booster', 'is_alchemy_card')
-                        VALUES (?1, ?2, ?3, ?4, ?5,?6, ?7, ?8, ?9)",
+                    ('name', 'set', 'collector_number', 'scry_uri', 'arena_id', 'image_uri', 'rarity', 'in_booster', 'is_alchemy_card', 'max_collected')
+                        VALUES (?1, ?2, ?3, ?4, ?5,?6, ?7, ?8, ?9, ?10)",
                 params![
                     tracker_card.name(),
                     tracker_card.set(),
@@ -224,6 +225,7 @@ impl MtgaDb {
                     tracker_card.rarity(),
                     tracker_card.in_booster() as i32,
                     tracker_card.is_alchemy_card() as i32,
+                    tracker_card.max_collected()
                     ])?;
         }
         Ok(())
@@ -910,6 +912,21 @@ impl MtgaDb {
             })
             .collect();
         Ok(cards)
+    }
+
+    pub fn get_collected_count_for_card(&self, user_id: u32, card: &TrackerCard) -> Result<u32> {
+        let user_collection = self.get_collection_for_user(user_id)?;
+
+        user_collection
+            .iter()
+            .find_map(|c| {
+                if c.grp_id == card.arena_id() {
+                    Some(c.count)
+                } else {
+                    None
+                }
+            })
+            .map_or(Ok(0), |count| Ok(count))
     }
 
     pub fn get_collected_cards_in_boosters(
