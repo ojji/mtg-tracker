@@ -1,7 +1,8 @@
 use iced::{
-    widget::{button, container, image, row, tooltip, tooltip::Position},
+    widget::{button, container, image, tooltip, tooltip::Position},
     Alignment, Command, Length,
 };
+use iced_aw::helpers::wrap_horizontal;
 
 use crate::{
     assets::*,
@@ -195,27 +196,28 @@ impl SetSelectorComponent {
             ),
         ];
 
-        let buttons_row = row(sets
-            .into_iter()
-            .map(|(set, symbol, height, tooltip_text)| {
-                let i = image(iced::widget::image::Handle::from_memory(symbol.to_vec()))
-                    .height(height);
-                let b = button(container(i))
-                    .on_press(TrackerMessage::SetSelector(
-                        SetSelectorMessage::Interaction(Interaction::SetSelected(String::from(
-                            set,
-                        ))),
-                    ))
-                    .style(ButtonStyle::SetSelector)
-                    .height(height);
-                let t = tooltip(b, tooltip_text, Position::FollowCursor)
-                    .gap(5)
-                    .style(ContainerStyle::Tooltip);
-                t.into()
-            })
-            .collect())
-        .spacing(8)
-        .padding(5)
+        let buttons_row = wrap_horizontal(
+            sets.into_iter()
+                .map(|(set, symbol, height, tooltip_text)| {
+                    let i = image(iced::widget::image::Handle::from_memory(symbol.to_vec()))
+                        .height(height);
+                    let b = button(container(i))
+                        .on_press(TrackerMessage::SetSelector(
+                            SetSelectorMessage::Interaction(Interaction::SetSelected(
+                                String::from(set),
+                            )),
+                        ))
+                        .style(ButtonStyle::SetSelector)
+                        .height(height);
+                    let t = tooltip(b, tooltip_text, Position::FollowCursor)
+                        .gap(5)
+                        .style(ContainerStyle::Tooltip);
+                    t.into()
+                })
+                .collect(),
+        )
+        .spacing(8.0)
+        .padding(5.0)
         .align_items(Alignment::Center);
 
         container(buttons_row).width(Length::Fill).into()
