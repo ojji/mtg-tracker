@@ -880,22 +880,22 @@ impl MtgaDb {
     }
 
     pub fn get_common_cards_in_boosters(&self, set: &str) -> Result<Vec<TrackerCard>> {
-        self.get_cards_in_boosters(set, "common")
+        self.get_cards_available_in_boosters(set, "common")
     }
 
     pub fn get_uncommon_cards_in_boosters(&self, set: &str) -> Result<Vec<TrackerCard>> {
-        self.get_cards_in_boosters(set, "uncommon")
+        self.get_cards_available_in_boosters(set, "uncommon")
     }
 
     pub fn get_rare_cards_in_boosters(&self, set: &str) -> Result<Vec<TrackerCard>> {
-        self.get_cards_in_boosters(set, "rare")
+        self.get_cards_available_in_boosters(set, "rare")
     }
 
     pub fn get_mythic_cards_in_boosters(&self, set: &str) -> Result<Vec<TrackerCard>> {
-        self.get_cards_in_boosters(set, "mythic")
+        self.get_cards_available_in_boosters(set, "mythic")
     }
 
-    fn get_cards_in_boosters(&self, set: &str, rarity: &str) -> Result<Vec<TrackerCard>> {
+    fn get_cards_available_in_boosters(&self, set: &str, rarity: &str) -> Result<Vec<TrackerCard>> {
         let db = Connection::open(self.db_path.as_path())?;
         let cards = TrackerCard::get_all_cards_from_set(&db, set)?
             .into_iter()
@@ -934,7 +934,7 @@ impl MtgaDb {
         let user_collection = self.get_collection_for_user(user_id)?;
         let mut result = vec![];
 
-        let cards_in_boosters = self.get_cards_in_boosters(set, rarity)?;
+        let cards_in_boosters = self.get_cards_available_in_boosters(set, rarity)?;
         for card in cards_in_boosters {
             let card_count = if let Some(c) = user_collection
                 .iter()
