@@ -8,8 +8,8 @@ use crate::Result;
 pub struct Tracker {}
 
 impl Tracker {
-    pub fn new() -> Tracker {
-        Tracker {}
+    pub fn new() -> Self {
+        Self {}
     }
 
     pub async fn run(&mut self, config: Config) -> Result<()> {
@@ -46,5 +46,11 @@ impl Tracker {
                 Ok(())
             }
         }
+    }
+}
+
+impl Default for Tracker {
+    fn default() -> Self {
+        Self::new()
     }
 }

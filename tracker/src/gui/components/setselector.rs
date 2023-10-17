@@ -226,14 +226,8 @@ impl SetSelectorComponent {
     pub fn update(&mut self, message: SetSelectorMessage) -> Command<TrackerMessage> {
         match message {
             SetSelectorMessage::Interaction(Interaction::SetSelected(set)) => {
-                self.set_selected = set;
-                return Command::perform(
-                    {
-                        let set = self.set_selected.clone();
-                        async move { set }
-                    },
-                    |set| TrackerMessage::Action(Action::ChangeSet(set)),
-                );
+                self.set_selected = set.clone();
+                Command::perform(async {}, move |_| TrackerMessage::Action(Action::ChangeSet(set)))
             }
         }
     }

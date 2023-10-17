@@ -200,7 +200,7 @@ impl Process {
         let names_ordinals_map_address =
             module.load_address + exports.AddressOfNameOrdinals as usize;
 
-        let exported_functions = (0..exports.NumberOfNames as usize).into_iter().map(|i| {
+        let exported_functions = (0..exports.NumberOfNames as usize).map(|i| {
             let memory_manager_iter = Arc::clone(&memory_manager);
             async move {
                 let function_name_addr = names_address + i * 4;
@@ -392,8 +392,7 @@ impl MemoryManager {
                 return Err(std::io::Error::last_os_error().into());
             }
 
-            let ret;
-            ret = WriteProcessMemory(
+            let ret = WriteProcessMemory(
                 handle,
                 allocated_address,
                 data.as_ptr() as *const c_void,

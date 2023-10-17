@@ -18,7 +18,7 @@ pub enum InjectError {
 
 impl From<std::io::Error> for InjectError {
     fn from(err: std::io::Error) -> Self {
-        InjectError::IoError(format!("IO error: {}", err.to_string()))
+        InjectError::IoError(format!("IO error: {}", err))
     }
 }
 
@@ -36,22 +36,19 @@ impl From<String> for InjectError {
 
 impl From<TryFromIntError> for InjectError {
     fn from(err: TryFromIntError) -> Self {
-        InjectError::ConversionError(format!("Int conversion error: {}", err.to_string()))
+        InjectError::ConversionError(format!("Int conversion error: {}", err))
     }
 }
 
 impl From<FromUtf8Error> for InjectError {
     fn from(err: FromUtf8Error) -> Self {
-        InjectError::ConversionError(format!(
-            "Utf-8 string conversion error: {}",
-            err.to_string()
-        ))
+        InjectError::ConversionError(format!("Utf-8 string conversion error: {}", err))
     }
 }
 
 impl From<windows::core::Error> for InjectError {
     fn from(err: windows::core::Error) -> Self {
-        InjectError::WindowsApiError(format!("OS error: {}", err.to_string()))
+        InjectError::WindowsApiError(format!("OS error: {}", err))
     }
 }
 
@@ -763,6 +760,7 @@ impl Injector {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Hash, PartialEq, Eq)]
 enum RequiredFunction {
     MonoGetRootDomain,

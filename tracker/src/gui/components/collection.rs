@@ -92,9 +92,9 @@ impl CollectionComponent {
 
         let cards = collected_common_cards
             .into_iter()
-            .chain(collected_uncommon_cards.into_iter())
-            .chain(collected_rare_cards.into_iter())
-            .chain(collected_mythic_cards.into_iter())
+            .chain(collected_uncommon_cards)
+            .chain(collected_rare_cards)
+            .chain(collected_mythic_cards)
             .map(|(tracker_card, collected)| CollectionCard {
                 arena_id: tracker_card.arena_id(),
                 long_name: tracker_card.to_string(),
@@ -142,7 +142,7 @@ impl CollectionComponent {
             .cards
             .iter()
             .find(|&card| card.arena_id == arena_id)
-            .and_then(|card| Some(card.image_loaded));
+            .map(|card| card.image_loaded);
 
         if let Some(false) = card_is_loaded {
             Command::perform(

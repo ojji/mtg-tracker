@@ -1,7 +1,7 @@
 use crate::logwatcher::LogWatcher;
 use crate::mtgadb::model::{
-    AccountInfoResult, InventoryResult, InventoryUpdateResult, ParseResult, ParseResults,
-    SceneChangeResult, UnknownResult, CollectionResult,
+    AccountInfoResult, CollectionResult, InventoryResult, InventoryUpdateResult, ParseResult,
+    ParseResults, SceneChangeResult, UnknownResult,
 };
 use crate::utils::JsonContentExtractor;
 use crate::Result;
@@ -30,7 +30,7 @@ pub async fn watch_log(watcher: LogWatcher) -> Result<(LogWatcher, Vec<ParseResu
     for (_, line) in content.lines().enumerate() {
         let new_part = check_new_line(&regex, line);
         match new_part {
-            NewPartResult::SummarizedMessagePart(summary) => {
+            NewPartResult::SummarizedMessage(summary) => {
                 // summary message should be on the second line
                 assert!(current_part.is_some());
                 current_part
@@ -39,21 +39,20 @@ pub async fn watch_log(watcher: LogWatcher) -> Result<(LogWatcher, Vec<ParseResu
                     .change_prefix(SUMMARIZED_MESSAGE_PREFIX.to_string());
                 current_part.as_mut().unwrap().add_line(summary);
             }
-            NewPartResult::NewPart(part) | NewPartResult::NoBracePart(part) => {
-                let old = current_part.replace(part);
-                if old.is_some() {
-                    add_message(&mut messages, old.unwrap());
+            NewPartResult::NewPart(part) | NewPartResult::NoBrace(part) => {
+                if let Some(old_part) = current_part.replace(part) {
+                    add_message(&mut messages, old_part);
                 }
             }
-            NewPartResult::ContinuationPart(continuation) => {
+            NewPartResult::Continuation(continuation) => {
                 if current_part.is_some() {
                     current_part.as_mut().unwrap().add_line(continuation);
                 }
             }
         }
     }
-    if current_part.is_some() {
-        add_message(&mut messages, current_part.unwrap());
+    if let Some(current_part) = current_part {
+        add_message(&mut messages, current_part);
     }
 
     Ok((watcher, messages))
@@ -61,7 +60,7 @@ pub async fn watch_log(watcher: LogWatcher) -> Result<(LogWatcher, Vec<ParseResu
 
 fn check_new_line(re: &Regex, line: &str) -> NewPartResult {
     if line.starts_with("[Message summarized") {
-        return NewPartResult::SummarizedMessagePart(line.to_string());
+        return NewPartResult::SummarizedMessage(line.to_string());
     }
 
     if let Some(caps) = re.captures(line) {
@@ -87,26 +86,23 @@ fn check_new_line(re: &Regex, line: &str) -> NewPartResult {
     let result = no_brace_prefixes
         .iter()
         .find(|&prefix| line.starts_with(prefix))
-        .map_or(
-            NewPartResult::ContinuationPart(line.to_string()),
-            |&prefix| {
-                NewPartResult::NoBracePart(IntermediatePart::new(
-                    line.to_string(),
-                    String::from(prefix),
-                    None,
-                    line.to_string(),
-                ))
-            },
-        );
+        .map_or(NewPartResult::Continuation(line.to_string()), |&prefix| {
+            NewPartResult::NoBrace(IntermediatePart::new(
+                line.to_string(),
+                String::from(prefix),
+                None,
+                line.to_string(),
+            ))
+        });
 
     result
 }
 
 enum NewPartResult {
-    SummarizedMessagePart(String),
+    SummarizedMessage(String),
     NewPart(IntermediatePart),
-    NoBracePart(IntermediatePart),
-    ContinuationPart(String),
+    NoBrace(IntermediatePart),
+    Continuation(String),
 }
 
 pub struct IntermediatePart {
@@ -164,8 +160,8 @@ impl IntermediatePart {
         match &self.date_str {
             Some(d) => {
                 let dt = chrono::NaiveDateTime::parse_from_str(d.as_str(), format);
-                if dt.is_ok() {
-                    Some(dt.unwrap())
+                if let Ok(dt) = dt {
+                    Some(dt)
                 } else {
                     None
                 }
@@ -184,9 +180,9 @@ impl IntermediatePart {
 }
 
 fn add_message(messages: &mut Vec<ParseResults>, part: IntermediatePart) {
-    let converters = [
-        UnityCrossThreadLoggerParser::new(),
-        MtgaDataCollectorParser::new(),
+    let converters: [Box<dyn LogParser>; 2] = [
+        Box::new(UnityCrossThreadLoggerParser::new()),
+        Box::new(MtgaDataCollectorParser::new()),
     ];
 
     if let Some(converter) = converters
@@ -223,10 +219,9 @@ pub struct UnityCrossThreadLoggerParser {
 }
 
 impl UnityCrossThreadLoggerParser {
-    pub fn new() -> Box<dyn LogParser> {
-        let parsers: Vec<Box<dyn LogParser>> = vec![SceneChangeParser::new()];
-
-        Box::new(UnityCrossThreadLoggerParser { parsers })
+    pub fn new() -> Self {
+        let parsers: Vec<Box<dyn LogParser>> = vec![Box::new(SceneChangeParser::new())];
+        Self { parsers }
     }
 }
 
@@ -238,18 +233,18 @@ impl LogParser for UnityCrossThreadLoggerParser {
     fn can_process(&self, part: &IntermediatePart) -> bool {
         part.prefix()
             .starts_with(<UnityCrossThreadLoggerParser as LogParser>::get_prefix(
-                &self,
+                self,
             ))
     }
 
     fn parse_part(&self, part: IntermediatePart) -> Vec<ParseResults> {
         if let Some(parser) = self.parsers.iter().find(|&p| p.can_process(&part)) {
-            return parser.parse_part(part);
+            parser.parse_part(part)
         } else {
             let unknown_message =
                 UnknownResult::new(part.prefix().to_string(), part.date(), part.content());
 
-            return vec![ParseResults::UnknownResult(unknown_message)];
+            vec![ParseResults::UnknownResult(unknown_message)]
         }
     }
 }
@@ -257,8 +252,8 @@ impl LogParser for UnityCrossThreadLoggerParser {
 struct SceneChangeParser {}
 
 impl SceneChangeParser {
-    pub fn new() -> Box<dyn LogParser> {
-        Box::new(SceneChangeParser {})
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
@@ -269,7 +264,7 @@ impl LogParser for SceneChangeParser {
 
     fn can_process(&self, part: &IntermediatePart) -> bool {
         part.content()
-            .starts_with(<SceneChangeParser as LogParser>::get_prefix(&self))
+            .starts_with(<SceneChangeParser as LogParser>::get_prefix(self))
     }
 
     fn parse_part(&self, part: IntermediatePart) -> Vec<ParseResults> {
@@ -287,10 +282,10 @@ pub struct MtgaDataCollectorParser {
 }
 
 impl MtgaDataCollectorParser {
-    pub fn new() -> Box<dyn LogParser> {
-        Box::new(MtgaDataCollectorParser {
+    pub fn new() -> Self {
+        MtgaDataCollectorParser {
             parser_regex: Regex::new(r"^\[(.*?)\](.*)").unwrap(),
-        })
+        }
     }
 }
 
@@ -342,7 +337,8 @@ impl LogParser for MtgaDataCollectorParser {
                 inventory.set_common_fields(part.prefix().to_string(), part.content(), date.ok());
                 messages.push(ParseResults::InventoryResult(inventory));
             } else if category.starts_with(COLLECTION_PREFIX) {
-                let mut collection = serde_json::from_str::<CollectionResult>(json_content).unwrap();
+                let mut collection =
+                    serde_json::from_str::<CollectionResult>(json_content).unwrap();
                 let date = chrono::NaiveDateTime::parse_from_str(collection.timestamp_str(), "%+");
                 collection.set_common_fields(part.prefix().to_string(), part.content(), date.ok());
                 messages.push(ParseResults::CollectionResult(collection));

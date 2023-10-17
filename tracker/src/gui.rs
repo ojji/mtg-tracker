@@ -138,7 +138,7 @@ impl Application for TrackerGui {
                     let database = flags.database_path.clone();
                     async move { TrackerGui::get_user_session(database).await }
                 },
-                |user| TrackerMessage::DisplayUserChanged(user),
+                TrackerMessage::DisplayUserChanged,
             ),
         ];
 
@@ -179,7 +179,7 @@ impl Application for TrackerGui {
                         .set_status(Status::Error(e.to_string()));
                     return Command::perform(async {}, move |_| {
                         TrackerMessage::Action(Action::LogMessage(
-                            format!("Error injecting: {}", e.to_string()),
+                            format!("Error injecting: {}", e),
                             Severity::Error,
                         ))
                     });
@@ -220,9 +220,9 @@ impl Application for TrackerGui {
             TrackerMessage::Action(action) => match action {
                 Action::ParseLog => {
                     let log_watcher = self.log_watcher.take();
-                    if log_watcher.is_some() {
+                    if let Some(log_watcher) = log_watcher {
                         return Command::perform(
-                            async move { parser::watch_log(log_watcher.unwrap()).await },
+                            async move { parser::watch_log(log_watcher).await },
                             TrackerMessage::ParseCompleted,
                         );
                     }
@@ -292,7 +292,7 @@ impl Application for TrackerGui {
                                     Err(e) => {
                                         return Command::perform(
                                             async {},
-                                            move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-usersession error: {}", e.to_string()), Severity::Error))
+                                            move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-usersession error: {}", e), Severity::Error))
                                         )
                                     }
                                 };
@@ -315,10 +315,10 @@ impl Application for TrackerGui {
                                 let timestamp = inventory_update.get_date().unwrap();
 
                                 if let Err(e) = self.database.add_user_inventory_update_event(current_user, inventory_update_hash, timestamp.to_string(), inventory_update.payload()) {
-                                    return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-inventoryupdateevent error: {}", e.to_string()), Severity::Error)));
+                                    return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-inventoryupdateevent error: {}", e), Severity::Error)));
                                 }
 
-                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Player inventory update event received at {}\n`{}`", timestamp, inventory_update.get_content()), Severity::Info)));
+                                Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Player inventory update event received at {}\n`{}`", timestamp, inventory_update.get_content()), Severity::Info)))
                             }
                             ParseResults::InventoryResult(inventory) => {
                                 let current_user = match self.log_user_session.as_ref() {
@@ -341,11 +341,11 @@ impl Application for TrackerGui {
                                 ) {
                                     return Command::perform(
                                         async {},
-                                        move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-inventoryevent error: {}", e.to_string()), Severity::Error))
+                                        move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-inventoryevent error: {}", e), Severity::Error))
                                     );
                                 };
 
-                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Player inventory event received at {}", timestamp), Severity::Info)));
+                                Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Player inventory event received at {}", timestamp), Severity::Info)))
                             }
                             ParseResults::CollectionResult(collection) => {
                                 let current_user = match self.log_user_session.as_ref() {
@@ -361,13 +361,13 @@ impl Application for TrackerGui {
                                 let timestamp = collection.get_date().unwrap();
 
                                 if let Err(e) = self.database.add_user_collection_event(current_user, collection_hash, timestamp.to_string(), collection.payload()) {
-                                    return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-collectionevent error: {}", e.to_string()), Severity::Error)));
+                                    return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("parser-collectionevent error: {}", e), Severity::Error)));
                                 }
 
-                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Collection updated at {}", timestamp.to_string()), Severity::Info)));
+                                Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Collection updated at {}", timestamp), Severity::Info)))
                             }
                             ParseResults::SceneChangeResult(scene_change) => {
-                                return Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Scene change from {} to {} ctx: {}", scene_change.from_scene(), scene_change.to_scene(), scene_change.context().unwrap()), Severity::Info)));
+                                Command::perform(async {}, move |_| TrackerMessage::Action(Action::LogMessage(format!("Scene change from {} to {} ctx: {}", scene_change.from_scene(), scene_change.to_scene(), scene_change.context().unwrap()), Severity::Info)))
                             }
                             _ => {
                                 Command::none()

@@ -43,11 +43,11 @@ impl DraftSummaryModel {
         let mythics_in_set = database.get_mythic_cards_in_boosters(set)?.len() as u32 * 4;
         let rares_in_set = database.get_rare_cards_in_boosters(set)?.len() as u32 * 4;
         let rares_owned = database
-            .get_collected_cards_in_boosters(user.user_id(), &set, "rare")?
+            .get_collected_cards_in_boosters(user.user_id(), set, "rare")?
             .iter()
             .fold(0_u32, |sum, card_with_count| sum + card_with_count.1);
         let mythics_owned = database
-            .get_collected_cards_in_boosters(user.user_id(), &set, "mythic")?
+            .get_collected_cards_in_boosters(user.user_id(), set, "mythic")?
             .iter()
             .fold(0_u32, |sum, card_with_count| sum + card_with_count.1);
 

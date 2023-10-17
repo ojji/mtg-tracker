@@ -337,7 +337,7 @@ impl MtgaDb {
                     MtgaDb::map_lowercase_mtga_artist_name_to_scry(
                         mtga_card.lowercase_artist().as_str()
                     ),
-                    scry_card.to_string()
+                    scry_card
                 );
                 return Some(scry_card);
             }
@@ -393,7 +393,7 @@ impl MtgaDb {
                         mtga_card_name,
                         mtga_card.set(),
                         mtga_card.collector_number(),
-                        scry_card.to_string()
+                        scry_card
                     );
                     return Some(scry_card);
                 }
@@ -660,19 +660,15 @@ impl MtgaDb {
         for mtga_card in mtga_data.iter() {
             mtga_artists
                 .entry(mtga_card.lowercase_artist())
-                .or_insert(vec![])
+                .or_default()
                 .push(mtga_card);
         }
 
         for mtga_artist in &mtga_artists {
-            if scry_artists
-                .iter()
-                .find(|&scry_artist| {
-                    scry_artist.as_str()
-                        == MtgaDb::map_lowercase_mtga_artist_name_to_scry(mtga_artist.0)
-                })
-                .is_none()
-            {
+            if !scry_artists.iter().any(|scry_artist| {
+                scry_artist.as_str()
+                    == MtgaDb::map_lowercase_mtga_artist_name_to_scry(mtga_artist.0)
+            }) {
                 writeln!(
                     output_file,
                     "Could not find a mapping for '{}' in the scry_db",
@@ -713,11 +709,11 @@ impl MtgaDb {
                     LIMIT 1",
                 params![],
                 |row| {
-                    return Ok(UserSession {
+                    Ok(UserSession {
                         user_id: row.get(0)?,
                         arena_id: row.get(1)?,
                         screen_name: row.get(2)?,
-                    });
+                    })
                 },
             )
         } else {
@@ -728,11 +724,11 @@ impl MtgaDb {
                 WHERE users.'arena_id' = ?1",
                 params![user_id.unwrap()],
                 |row| {
-                    return Ok(UserSession {
+                    Ok(UserSession {
                         user_id: row.get(0)?,
                         arena_id: row.get(1)?,
                         screen_name: row.get(2)?,
-                    });
+                    })
                 },
             )
         };
@@ -752,7 +748,7 @@ impl MtgaDb {
             }
         }
 
-        return Ok(user?);
+        Ok(user?)
     }
 
     fn create_user_inventory_updates(tx: &Transaction) -> Result<()> {
@@ -926,7 +922,7 @@ impl MtgaDb {
                     None
                 }
             })
-            .map_or(Ok(0), |count| Ok(count))
+            .map_or(Ok(0), Ok)
     }
 
     pub fn get_collected_cards_in_boosters(
@@ -969,7 +965,7 @@ impl MtgaDb {
             Some(data) => {
                 let x: String = data.get(0)?;
                 Ok(x)
-            },
+            }
             None => Err("No image_uri for {arena_id}".into()),
         }
     }
@@ -992,12 +988,10 @@ impl MtgaDb {
         match results.next()? {
             Some(collection_data) => {
                 let result: Vec<CollectedCard> = serde_json::from_value(collection_data.get(0)?)?;
-                return Ok(result);
+                Ok(result)
             }
-            None => {
-                return Err("Could not find users collection".into());
-            }
-        };
+            None => Err("Could not find users collection".into()),
+        }
     }
 
     fn create_user_inventory(tx: &Transaction) -> Result<()> {
@@ -1082,12 +1076,10 @@ impl MtgaDb {
         match results.next()? {
             Some(inventory_data) => {
                 let result: PlayerInventoryData = serde_json::from_value(inventory_data.get(0)?)?;
-                return Ok(result);
+                Ok(result)
             }
-            None => {
-                return Err("Could not find users inventory".into());
-            }
-        };
+            None => Err("Could not find users inventory".into()),
+        }
     }
 
     pub fn get_played_drafts(&self, user_id: u32, set: &str) -> Result<Vec<DraftDetails>> {
@@ -1110,13 +1102,13 @@ impl MtgaDb {
             .boosters
             .iter()
             .filter_map(|booster| {
-                if &booster.name_from_collation_id() == set {
+                if booster.name_from_collation_id() == set {
                     Some(booster.count as u32)
                 } else {
                     None
                 }
             })
-            .fold(0, |sum, booster_count| sum + booster_count);
+            .sum::<u32>();
 
         Ok(boosters_count)
     }

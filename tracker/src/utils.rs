@@ -12,16 +12,12 @@ impl JsonContentExtractor {
         let arr_start_idx = content.find('[');
         let obj_start_idx = content.find('{');
 
-        let (start_idx, end_char) = {
-            if arr_start_idx.is_none() {
-                (obj_start_idx.unwrap(), '}')
-            } else if obj_start_idx.is_none() {
-                (arr_start_idx.unwrap(), ']')
-            } else if arr_start_idx.unwrap() < obj_start_idx.unwrap() {
-                (arr_start_idx.unwrap(), ']')
-            } else {
-                (obj_start_idx.unwrap(), '}')
-            }
+        let (start_idx, end_char) = match arr_start_idx {
+            Some(arr_start_idx) => match obj_start_idx {
+                Some(obj_start_idx) if obj_start_idx < arr_start_idx => (obj_start_idx, '}'),
+                _ => (arr_start_idx, ']'),
+            },
+            None => (obj_start_idx.unwrap(), '}'),
         };
 
         let end_idx = content.find(end_char).unwrap();

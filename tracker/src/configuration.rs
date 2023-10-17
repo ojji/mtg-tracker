@@ -67,7 +67,7 @@ impl Config {
                         }),
                     })
                 }
-                _ => return Err("Unrecognized command".into()),
+                _ => Err("Unrecognized command".into()),
             }
         }
     }

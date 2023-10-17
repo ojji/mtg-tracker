@@ -58,7 +58,6 @@ impl ParseResult for ParseResults {
             ParseResults::InventoryUpdateResult(r) => r.get_date(),
             ParseResults::InventoryResult(r) => r.get_date(),
             ParseResults::CollectionResult(r) => r.get_date(),
-
         }
     }
 
@@ -116,7 +115,6 @@ impl ParseResult for CollectionResult {
         self.content = content;
     }
 }
-
 
 #[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
@@ -324,7 +322,7 @@ impl SceneChangeResult {
     }
 
     pub fn context(&self) -> Option<&str> {
-        self.context.as_ref().map(|x| x.as_str())
+        self.context.as_deref()
     }
 }
 
@@ -627,7 +625,7 @@ pub struct ScryCard {
     /// This card’s border color: `black`, `white`, `borderless`, `silver`, or `gold`.
     border_color: String,
 
-    ///	The Scryfall ID for the card back design present on this card.
+    /// The Scryfall ID for the card back design present on this card.
     card_back_id: Option<Guid>,
 
     /// This card’s collector number. Note that collector numbers can contain non-numeric characters,
@@ -707,7 +705,7 @@ pub struct ScryCard {
     /// True if this card is a reprint.
     reprint: bool,
 
-    ///	A link to this card’s set on Scryfall’s website.
+    /// A link to this card’s set on Scryfall’s website.
     scryfall_set_uri: Uri,
 
     /// This card’s full set name.
@@ -777,10 +775,7 @@ impl ScryCard {
     }
 
     pub fn lowercase_artist(&self) -> Option<String> {
-        match &self.artist {
-            Some(artist) => Some(artist.to_lowercase()),
-            None => None,
-        }
+        self.artist.as_ref().map(|artist| artist.to_lowercase())
     }
 
     pub fn booster(&self) -> bool {
@@ -1657,9 +1652,9 @@ impl TrackerCard {
                 is_alchemy_card: row.get(8)?,
                 max_collected: row.get(9)?,
             };
-            return Ok(card);
+            Ok(card)
         } else {
-            return Err("Invalid arena_id".into());
+            Err("Invalid arena_id".into())
         }
     }
 
@@ -1828,8 +1823,7 @@ impl Hash for HashableF64 {
 }
 
 fn integer_decode(val: f64) -> (u64, i16, i8) {
-    use std::mem;
-    let bits: u64 = unsafe { mem::transmute(val) };
+    let bits: u64 = val.to_bits();
     let sign: i8 = if bits >> 63 == 0 { 1 } else { -1 };
     let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
     let mantissa = if exponent == 0 {

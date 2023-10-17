@@ -26,25 +26,25 @@ pub enum TrackerError {
 
 impl From<serde_json::Error> for TrackerError {
     fn from(err: serde_json::Error) -> Self {
-        TrackerError::SerdeError(format!("Serde error: {}", err.to_string()))
+        TrackerError::SerdeError(format!("Serde error: {}", err))
     }
 }
 
 impl From<std::io::Error> for TrackerError {
     fn from(err: std::io::Error) -> Self {
-        TrackerError::IoError(format!("IO error: {}", err.to_string()))
+        TrackerError::IoError(format!("IO error: {}", err))
     }
 }
 
 impl From<iced::Error> for TrackerError {
     fn from(err: iced::Error) -> Self {
-        TrackerError::IcedError(format!("Iced error: {}", err.to_string()))
+        TrackerError::IcedError(format!("Iced error: {}", err))
     }
 }
 
 impl From<rusqlite::Error> for TrackerError {
     fn from(err: rusqlite::Error) -> Self {
-        TrackerError::SqlError(format!("Sql error: {}", err.to_string()))
+        TrackerError::SqlError(format!("Sql error: {}", err))
     }
 }
 impl From<&str> for TrackerError {
@@ -67,10 +67,7 @@ impl From<InjectError> for TrackerError {
 
 impl From<FromUtf8Error> for TrackerError {
     fn from(err: FromUtf8Error) -> Self {
-        TrackerError::ConversionError(format!(
-            "Utf-8 string conversion error: {}",
-            err.to_string()
-        ))
+        TrackerError::ConversionError(format!("Utf-8 string conversion error: {}", err))
     }
 }
 

@@ -49,7 +49,7 @@ impl LogService {
                     if let Err(e) = debug_file {
                         break 'init LogServiceState::Error(format!(
                             "Could not create debug file: {}",
-                            e.to_string()
+                            e
                         ));
                     }
 
@@ -57,7 +57,7 @@ impl LogService {
                     if let Err(e) = info_file {
                         break 'init LogServiceState::Error(format!(
                             "Could not create info file: {}",
-                            e.to_string()
+                            e
                         ));
                     }
 
@@ -65,7 +65,7 @@ impl LogService {
                     if let Err(e) = error_file {
                         break 'init LogServiceState::Error(format!(
                             "Could not create error file: {}",
-                            e.to_string()
+                            e
                         ));
                     }
 
@@ -133,8 +133,7 @@ pub struct Logger(mpsc::UnboundedSender<LogMessage>);
 
 impl Logger {
     pub fn log(&mut self, content: String, severity: Severity) {
-        let _ = self
-            .0
+        self.0
             .unbounded_send(LogMessage { content, severity })
             .unwrap();
     }
