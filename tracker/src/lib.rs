@@ -5,12 +5,12 @@ use injector::InjectError;
 pub mod assets;
 pub mod configuration;
 pub mod gui;
-mod logwatcher;
 pub mod logger;
+mod logwatcher;
 pub mod mtgadb;
+mod parser;
 pub mod tracker;
 mod utils;
-mod parser;
 
 #[derive(Debug, Clone)]
 pub enum TrackerError {
@@ -21,6 +21,7 @@ pub enum TrackerError {
     InjectError(InjectError),
     ConversionError(String),
     CustomError(String),
+    ReqwestError(String),
 }
 
 impl From<serde_json::Error> for TrackerError {
@@ -73,6 +74,12 @@ impl From<FromUtf8Error> for TrackerError {
     }
 }
 
+impl From<reqwest::Error> for TrackerError {
+    fn from(value: reqwest::Error) -> Self {
+        TrackerError::ReqwestError(value.to_string())
+    }
+}
+
 impl Display for TrackerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -83,6 +90,7 @@ impl Display for TrackerError {
             TrackerError::InjectError(e) => write!(f, "{}", e),
             TrackerError::ConversionError(e) => write!(f, "{}", e),
             TrackerError::CustomError(e) => write!(f, "{}", e),
+            TrackerError::ReqwestError(e) => write!(f, "{}", e),
         }
     }
 }

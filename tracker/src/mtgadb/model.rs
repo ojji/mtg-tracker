@@ -803,7 +803,7 @@ impl ScryCard {
         self.image_uris
             .as_ref()
             .unwrap_or(&HashMap::new())
-            .get("png")
+            .get("normal")
             .unwrap_or(&Uri::new())
             .to_owned()
     }

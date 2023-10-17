@@ -1,4 +1,4 @@
-use crate::gui::{style::TOOLTIP_BACKGROUND_COLOR, TrackerTheme};
+use crate::gui::{style::TOOLTIP_BACKGROUND_COLOR, style::BOX_BACKGROUND_COLOR, TrackerTheme};
 use iced::{widget::container::Appearance, Background, BorderRadius, Color};
 
 #[derive(Default)]
@@ -7,6 +7,7 @@ pub enum ContainerStyle {
     Default,
     Tooltip,
     SummaryPanel,
+    Box,
 }
 
 impl iced::widget::container::StyleSheet for TrackerTheme {
@@ -26,6 +27,15 @@ impl iced::widget::container::StyleSheet for TrackerTheme {
                 border_width: 1.0,
                 border_color: Color::BLACK,
                 ..Default::default()
+            },
+            ContainerStyle::Box => {
+                Appearance {
+                    text_color: None,
+                    background: Some(Background::Color(BOX_BACKGROUND_COLOR)),
+                    border_radius: 2.0.into(),
+                    border_width: 0.0,
+                    border_color: Color::TRANSPARENT,
+                }
             },
         }
     }

@@ -3,6 +3,7 @@ pub mod draftsummary;
 pub mod injectbar;
 pub mod logview;
 pub mod collection;
+pub mod popup_element;
 
 use crate::gui::style::TrackerTheme;
 

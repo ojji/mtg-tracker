@@ -58,6 +58,7 @@ pub struct TrackerGui {
 pub enum TrackerMessage {
     TrackerInjected(Result<()>),
     DisplayUserChanged(Result<UserSession>),
+    CardImageLoaded(Result<(u32, iced::widget::image::Handle)>),
     ParseCompleted(Result<(LogWatcher, Vec<ParseResults>)>),
     Action(Action),
     SetSelector(SetSelectorMessage),
@@ -69,6 +70,7 @@ pub enum TrackerMessage {
 pub enum Action {
     Reinject,
     ChangeSet(String),
+    CardHovered(u32),
     ParseLog,
     LogMessage(String, Severity),
     SwitchView,
@@ -149,6 +151,16 @@ impl Application for TrackerGui {
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
+            TrackerMessage::CardImageLoaded(r) => match r {
+                Ok((id, image_handle)) => {
+                    return self.collection_component.image_loaded(id, image_handle);
+                }
+                Err(e) => {
+                    return Command::perform(async {}, move |_| {
+                        TrackerMessage::Action(Action::LogMessage(e.to_string(), Severity::Error))
+                    });
+                }
+            },
             TrackerMessage::TrackerInjected(r) => match r {
                 Ok(_) => {
                     self.inject_bar_component
@@ -214,6 +226,9 @@ impl Application for TrackerGui {
                             TrackerMessage::ParseCompleted,
                         );
                     }
+                }
+                Action::CardHovered(arena_id) => {
+                    return self.collection_component.hover_card(arena_id);
                 }
                 Action::LogMessage(message, severity) => {
                     self.logview_component.log_message(message.clone());

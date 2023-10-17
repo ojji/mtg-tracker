@@ -16,6 +16,7 @@ const HOVERED_SCROLLER_COLOR: Color = Color::from_rgb(0.658, 0.658, 0.658);
 const SCROLLABLE_BACKGROUND_COLOR: Color = Color::from_rgb(0.945, 0.945, 0.945);
 const TOOLTIP_BACKGROUND_COLOR: Color = Color::from_rgb(0.9, 0.9, 0.9);
 const DEFAULT_BUTTON_BACKGROUND_COLOR: Color = Color::from_rgb(0.87, 0.87, 0.87);
+const BOX_BACKGROUND_COLOR: Color = Color::from_rgb(0.87, 0.87, 0.87);
 
 #[derive(Default)]
 pub enum TrackerThemeStyle {

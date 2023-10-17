@@ -954,6 +954,26 @@ impl MtgaDb {
         Ok(result)
     }
 
+    pub fn get_scry_image_uri(&self, arena_id: u32) -> Result<String> {
+        let db = Connection::open(self.db_path.as_path())?;
+        let mut stmt = db.prepare(
+            "
+            SELECT cards_db.'image_uri'
+            FROM cards_db
+            WHERE cards_db.'arena_id' = ?1
+            ",
+        )?;
+
+        let mut results = stmt.query(params![arena_id])?;
+        match results.next()? {
+            Some(data) => {
+                let x: String = data.get(0)?;
+                Ok(x)
+            },
+            None => Err("No image_uri for {arena_id}".into()),
+        }
+    }
+
     fn get_collection_for_user(&self, user_id: u32) -> Result<Vec<CollectedCard>> {
         let db = Connection::open(self.db_path.as_path())?;
 
