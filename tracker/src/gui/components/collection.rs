@@ -189,15 +189,15 @@ fn card_row_container(card: &CollectionCard) -> Element<TrackerMessage> {
         if card.image_loaded {
             if let Some(image_handle) = card.image.as_ref() {
                 container(image(image_handle.clone()))
-                    .width(245.0)
-                    .height(341.0)
+                    .width(269.0)
+                    .height(375.0)
                     .into()
             } else {
                 container(image(image::Handle::from_path(
                     "assets/cards/no_image_available.png",
                 )))
-                .width(245.0)
-                .height(341.0)
+                .width(269.0)
+                .height(375.0)
                 .into()
             }
         } else {
