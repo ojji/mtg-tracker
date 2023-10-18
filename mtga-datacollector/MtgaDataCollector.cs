@@ -1,10 +1,13 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
 using UnityEngine;
 using Wizards.Mtga.FrontDoorModels;
 using Newtonsoft.Json;
 using System.Threading;
 using System.Linq;
+using System.Collections.Generic;
+using System.Text;
 
 namespace mtga_datacollector
 {
@@ -31,6 +34,7 @@ namespace mtga_datacollector
     private UnityCrossThreadLogger _logger = new UnityCrossThreadLogger("MTGADataCollector");
     private bool _subscribedToAccountInfo = false;
     private bool _subscribedToInventory = false;
+    private List<string> _hashesWritten = new List<string>();
 
     public void Start()
     {
@@ -78,7 +82,7 @@ namespace mtga_datacollector
             Timestamp = String.Format($"{DateTime.Now:O}"),
           };
 
-          _logger.Info($"[account-info]{JsonConvert.SerializeObject(logEntry)}");
+          WriteToLog("account-info", logEntry);
           _subscribedToAccountInfo = true;
         }
         catch (Exception e)
@@ -141,7 +145,7 @@ namespace mtga_datacollector
             Timestamp = String.Format($"{DateTime.Now:O}"),
           };
 
-          _logger.Info($"[collection]{JsonConvert.SerializeObject(collectionEntry)}");
+          WriteToLog("collection", collectionEntry);
 
           CollectorEvent inventory = new CollectorEvent
           {
@@ -149,7 +153,7 @@ namespace mtga_datacollector
             Timestamp = String.Format($"{DateTime.Now:O}"),
           };
 
-          _logger.Info($"[inventory]{JsonConvert.SerializeObject(inventory)}");
+          WriteToLog("inventory", inventory);
         }
         catch (Exception e)
         {
@@ -169,7 +173,7 @@ namespace mtga_datacollector
         Attachment = payload
       };
 
-      _logger.Info($"[inventory-update]{JsonConvert.SerializeObject(inventoryUpdate)}");
+      WriteToLog("inventory-update", inventoryUpdate);
     }
 
     public void OnDestroy()
@@ -185,6 +189,29 @@ namespace mtga_datacollector
     public void OnApplicationQuit()
     {
       _logger.Info($"[initialization]App quit at {System.DateTime.Now:O}. Bye bye!");
+    }
+
+    private void WriteToLog(string prefix, CollectorEvent collectorEvent)
+    {
+      var hash = CalculateHashForAttachment(collectorEvent);
+      if (!_hashesWritten.Contains(hash))
+      {
+        _logger.Info($"[{prefix}]{JsonConvert.SerializeObject(collectorEvent)}");
+        _hashesWritten.Add(hash);
+      }
+    }
+
+    private string CalculateHashForAttachment(CollectorEvent collectorEvent)
+    {
+      var content = JsonConvert.SerializeObject(collectorEvent.Attachment);
+      MD5 md5 = MD5.Create();
+      var hashBytes = md5.ComputeHash(Encoding.UTF8.GetBytes(content));
+      var hashBuilder = new StringBuilder();
+      foreach (var b in hashBytes)
+      {
+        hashBuilder.Append(b.ToString("x2"));
+      }
+      return hashBuilder.ToString();
     }
   }
 }
