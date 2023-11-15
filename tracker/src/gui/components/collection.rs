@@ -46,7 +46,7 @@ impl CollectionComponent {
     {
         CollectionComponent {
             database: MtgaDb::new(database_path),
-            selected_set: String::from("woe"),
+            selected_set: String::from("lci"),
             display_user_session: None,
             model: CollectionModel { cards: vec![] },
         }

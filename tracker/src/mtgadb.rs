@@ -1148,6 +1148,7 @@ impl MtgaDb {
             "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" | "woe" => {
                 Ok((6.0 / 7.0, 1.0 / 7.0))
             } // 1:7
+            "lci" => Ok((5.8 / 6.8, 1.0 / 6.8)),                         // 1:6.8
             "akr" => Ok((5.0 / 6.0, 1.0 / 6.0)),                         // 1:6
             "bro" => Ok((4.8 / 5.8, 1.0 / 5.8)),                         // 1:5.8
             other => Err(format!("unrecognized set name: {} in get_drop_rates()", other).into()),
