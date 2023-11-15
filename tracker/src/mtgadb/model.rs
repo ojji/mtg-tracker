@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime};
 use rusqlite::{types::FromSql, Connection, ToSql};
 use serde::{de::Visitor, Deserialize, Serialize};
 
@@ -91,6 +91,13 @@ impl CollectionResult {
         &self.timestamp
     }
 
+    pub fn friendly_time(&self) -> String {
+        match DateTime::parse_from_rfc3339(self.timestamp_str()) {
+            Ok(time) => time.format("%Y-%m-%d %H:%M:%S").to_string(),
+            Err(e) => format!("time conversion err: {}", e),
+        }
+    }
+
     pub fn payload(&self) -> &Vec<CollectedCard> {
         &self.attachment
     }
@@ -134,6 +141,13 @@ impl InventoryResult {
         &self.timestamp
     }
 
+    pub fn friendly_time(&self) -> String {
+        match DateTime::parse_from_rfc3339(self.timestamp_str()) {
+            Ok(time) => time.format("%Y-%m-%d %H:%M:%S").to_string(),
+            Err(e) => format!("time conversion err: {}", e),
+        }
+    }
+
     pub fn payload(&self) -> &PlayerInventoryData {
         &self.attachment
     }
@@ -173,12 +187,94 @@ pub struct InventoryUpdateResult {
 }
 
 impl InventoryUpdateResult {
+    pub fn friendly_time(&self) -> String {
+        match DateTime::parse_from_rfc3339(self.timestamp_str()) {
+            Ok(time) => time.format("%Y-%m-%d %H:%M:%S").to_string(),
+            Err(e) => format!("time conversion err: {}", e),
+        }
+    }
+
     pub fn timestamp_str(&self) -> &str {
         &self.timestamp
     }
 
+    pub fn source_context(&self) -> &str {
+        &self.attachment.context.source
+    }
+
     pub fn payload(&self) -> &InventoryUpdateData {
         &self.attachment
+    }
+
+    pub fn mythic_wildcard_delta(&self) -> i32 {
+        self.attachment.delta.wc_mythic_delta
+    }
+
+    pub fn rare_wildcard_delta(&self) -> i32 {
+        self.attachment.delta.wc_rare_delta
+    }
+
+    pub fn uncommon_wildcard_delta(&self) -> i32 {
+        self.attachment.delta.wc_uncommon_delta
+    }
+
+    pub fn common_wildcard_delta(&self) -> i32 {
+        self.attachment.delta.wc_common_delta
+    }
+
+    pub fn xp_gained(&self) -> i32 {
+        self.attachment.xp_gained
+    }
+
+    pub fn gems_delta(&self) -> i32 {
+        self.attachment.delta.gems_delta
+    }
+
+    pub fn gold_delta(&self) -> i32 {
+        self.attachment.delta.gold_delta
+    }
+
+    pub fn vault_delta_percent(&self) -> f32 {
+        let cards_vault_sum = self
+            .attachment
+            .aetherized_cards
+            .iter()
+            .filter_map(|card| {
+                if !card.added_to_inventory {
+                    Some(card.vault_progress.inner_value as f32)
+                } else {
+                    None
+                }
+            })
+            .sum::<f32>();
+
+        (self.attachment.delta.vault_progress_delta.inner_value as f32 + cards_vault_sum) / 10.0
+    }
+
+    pub fn cards_added(&self) -> Vec<u32> {
+        self.attachment
+            .aetherized_cards
+            .iter()
+            .filter_map(|card| {
+                if card.added_to_inventory {
+                    Some(card.grp_id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn tickets(&self) -> Option<&Vec<TicketStack>> {
+        self.attachment.delta.tickets.as_ref()
+    }
+
+    pub fn packs_delta(&self) -> Option<&Vec<BoosterStack>> {
+        if self.attachment.delta.booster_delta.is_empty() {
+            None
+        } else {
+            Some(self.attachment.delta.booster_delta.as_ref())
+        }
     }
 }
 
@@ -1273,7 +1369,7 @@ pub struct AetherizedCardInformation {
 /// }
 /// ```
 ///
-/// The current enum values (as of 2022-09-12) are:
+/// The current enum values of `Wizards.Models.InventoryUpdateSource` (as of 2023-10-19) are:
 /// `Unknown`, `QuestReward`, `DailyWins`, `WeeklyWins`, `LoginGrant`, `BattlePassLevelUp`, `BattlePassLevelMasteryTree`,
 /// `EarlyPlayerProgressionLevelUp`, `EarlyPlayerProgressionMasteryTree`, `ProgressionRewardTierAdd`, `RenewalReward`,
 /// `MercantilePurchase`, `MercantileChestPurchase`, `MercantileBoosterPurchase`, `EventReward`, `RedeemVoucher`,

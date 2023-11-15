@@ -910,6 +910,14 @@ impl MtgaDb {
         Ok(cards)
     }
 
+    pub fn get_tracker_card(&self, arena_id: u32) -> Option<TrackerCard> {
+        if let Ok(db) = Connection::open(self.db_path.as_path()) {
+            TrackerCard::get_by_id(&db, arena_id).ok()
+        } else {
+            None
+        }
+    }
+
     pub fn get_collected_count_for_card(&self, user_id: u32, card: &TrackerCard) -> Result<u32> {
         let user_collection = self.get_collection_for_user(user_id)?;
 
