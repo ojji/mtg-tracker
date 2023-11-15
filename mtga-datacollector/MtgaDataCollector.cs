@@ -34,7 +34,6 @@ namespace mtga_datacollector
     private UnityCrossThreadLogger _logger = new UnityCrossThreadLogger("MTGADataCollector");
     private bool _subscribedToAccountInfo = false;
     private bool _subscribedToInventory = false;
-    private List<string> _hashesWritten = new List<string>();
 
     public void Start()
     {
@@ -111,7 +110,7 @@ namespace mtga_datacollector
         try
         {
           WrapperController.Instance.InventoryManager.UnsubscribeFromAll(this.UpdateInventory);
-          WrapperController.Instance.InventoryManager.SubscribeToAll(this.UpdateInventory);
+          WrapperController.Instance.InventoryManager.SubscribeToAll(this.UpdateInventory, true);
           _subscribedToInventory = true;
 
           Task.Run(PeriodicUpdater);
@@ -193,25 +192,7 @@ namespace mtga_datacollector
 
     private void WriteToLog(string prefix, CollectorEvent collectorEvent)
     {
-      var hash = CalculateHashForAttachment(collectorEvent);
-      if (!_hashesWritten.Contains(hash))
-      {
-        _logger.Info($"[{prefix}]{JsonConvert.SerializeObject(collectorEvent)}");
-        _hashesWritten.Add(hash);
-      }
-    }
-
-    private string CalculateHashForAttachment(CollectorEvent collectorEvent)
-    {
-      var content = JsonConvert.SerializeObject(collectorEvent.Attachment);
-      MD5 md5 = MD5.Create();
-      var hashBytes = md5.ComputeHash(Encoding.UTF8.GetBytes(content));
-      var hashBuilder = new StringBuilder();
-      foreach (var b in hashBytes)
-      {
-        hashBuilder.Append(b.ToString("x2"));
-      }
-      return hashBuilder.ToString();
+      _logger.Info($"[{prefix}]{JsonConvert.SerializeObject(collectorEvent)}");
     }
   }
 }
