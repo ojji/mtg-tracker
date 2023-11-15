@@ -862,8 +862,13 @@ impl ScryCard {
         &self.rarity
     }
 
-    pub fn lowercase_name(&self) -> String {
-        self.name.to_lowercase()
+    pub fn unreversed_lowercase_name(&self) -> String {
+        if self.layout == "reversible_card" {
+            let separator = self.name.find('/').unwrap();
+            self.name[0..separator - 1].to_lowercase()
+        } else {
+            self.name.to_lowercase()
+        }
     }
 
     pub fn is_available_in_arena(&self) -> bool {

@@ -73,7 +73,7 @@ impl MtgaDb {
                     scry_card.arena_id().is_some()
                         && scry_card.arena_id().unwrap() == mtga_card.arena_id()
                         && MtgaDb::get_mtga_card_name(&mtga_cards, mtga_card)
-                            == scry_card.lowercase_name()
+                            == scry_card.unreversed_lowercase_name()
                         && scry_card.is_available_in_arena()
                         && scry_card.lowercase_artist().is_some()
                         && scry_card.lowercase_artist().unwrap()
@@ -286,9 +286,9 @@ impl MtgaDb {
                     }
                 };
 
-                if mtga_card_name == scry_card.lowercase_name()
+                if mtga_card_name == scry_card.unreversed_lowercase_name()
                     || (different_card_scry_is_referencing.is_some()
-                        && mtga_card_name == scry_card.lowercase_name()[2..])
+                        && mtga_card_name == scry_card.unreversed_lowercase_name()[2..])
                 {
                     return Some(scry_card);
                 }
@@ -322,7 +322,13 @@ impl MtgaDb {
         let results = scry_cards_db
             .iter()
             .filter(|&scry_card| {
-                scry_card.lowercase_name() == mtga_card_name && scry_card.set() == mtga_card.set()
+                scry_card.unreversed_lowercase_name() == mtga_card_name
+                    && scry_card.set() == mtga_card.set()
+                    && scry_card.lowercase_artist().is_some()
+                    && scry_card.lowercase_artist().unwrap()
+                        == MtgaDb::map_lowercase_mtga_artist_name_to_scry(
+                            mtga_card.lowercase_artist().as_str(),
+                        )
             })
             .collect::<Vec<&ScryCard>>();
         match results.len() {
@@ -373,7 +379,7 @@ impl MtgaDb {
             let results = scry_cards_db
                 .iter()
                 .filter(|&scry_card| {
-                    mtga_card_name == scry_card.lowercase_name()
+                    mtga_card_name == scry_card.unreversed_lowercase_name()
                         && scry_card.lowercase_artist().is_some()
                         && scry_card.lowercase_artist().unwrap()
                             == MtgaDb::map_lowercase_mtga_artist_name_to_scry(
@@ -622,6 +628,11 @@ impl MtgaDb {
             "じんてつ/jintetsu" => "jintetsu",
             "heonhwa" => "heonhwa choe",
             "結暉ゆち/yuchi yuki" => "yuchi yuki",
+            "pablo rivera" => "pablo mendoza",
+            "alex kintner" => "alexander kintner",
+            "mónica robles corzo aka monarobot" => "mónica robles corzo",
+            "josiah “jo” cameron" => "josiah \"jo\" cameron",
+            "néstor ossandón leal" => "nestor ossandon leal",
             _ => mtga_artist_name,
         }
     }
