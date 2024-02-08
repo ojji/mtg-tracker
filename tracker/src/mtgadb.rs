@@ -76,6 +76,7 @@ impl MtgaDb {
                             == scry_card.unreversed_lowercase_name()
                         && scry_card.is_available_in_arena()
                         && scry_card.lowercase_artist().is_some()
+                        && scry_card.set() == mtga_card.set()
                         && scry_card.lowercase_artist().unwrap()
                             == MtgaDb::map_lowercase_mtga_artist_name_to_scry(
                                 mtga_card.lowercase_artist().as_str(),
@@ -329,6 +330,7 @@ impl MtgaDb {
                         == MtgaDb::map_lowercase_mtga_artist_name_to_scry(
                             mtga_card.lowercase_artist().as_str(),
                         )
+                    && scry_card.lang() == "en"
             })
             .collect::<Vec<&ScryCard>>();
         match results.len() {
@@ -404,6 +406,13 @@ impl MtgaDb {
                     return Some(scry_card);
                 }
                 _ => {
+                    if let Some(card) = results.iter().find(|scry_card| {
+                        scry_card
+                            .arena_id()
+                            .is_some_and(|arena_id| arena_id == mtga_card.arena_id())
+                    }) {
+                        return Some(card);
+                    }
                     let scry_card_names: Vec<String> =
                         results.iter().map(|c| c.to_string()).collect();
                     let scry_card_names = scry_card_names.join(", ");
@@ -1143,7 +1152,7 @@ impl MtgaDb {
     )> {
         match set {
             "xln" | "rix" | "dom" | "m19" | "grn" | "rna" | "war" | "m20" | "eld" | "thb"
-            | "iko" | "m21" | "stx" | "neo" => Ok((7.0 / 8.0, 1.0 / 8.0)), // 1:8
+            | "iko" | "m21" | "stx" | "neo" | "mkm" => Ok((7.0 / 8.0, 1.0 / 8.0)), // 1:8
             "znr" | "khm" | "mid" | "vow" => Ok((6.4 / 7.4, 1.0 / 7.4)), // 1:7.4
             "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" | "woe" => {
                 Ok((6.0 / 7.0, 1.0 / 7.0))
