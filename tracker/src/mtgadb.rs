@@ -1121,7 +1121,7 @@ impl MtgaDb {
             .boosters
             .iter()
             .filter_map(|booster| {
-                if booster.name_from_collation_id() == set {
+                if booster.short_name() == set {
                     Some(booster.count as u32)
                 } else {
                     None

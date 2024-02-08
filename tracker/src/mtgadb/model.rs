@@ -177,6 +177,7 @@ impl ParseResult for InventoryResult {
 #[serde(rename_all = "PascalCase")]
 pub struct InventoryUpdateResult {
     timestamp: String,
+    source: String,
     attachment: InventoryUpdateData,
     #[serde(skip)]
     prefix: String,
@@ -196,6 +197,10 @@ impl InventoryUpdateResult {
 
     pub fn timestamp_str(&self) -> &str {
         &self.timestamp
+    }
+
+    pub fn update_source(&self) -> &str {
+        &self.source
     }
 
     pub fn source_context(&self) -> &str {
@@ -234,6 +239,62 @@ impl InventoryUpdateResult {
         self.attachment.delta.gold_delta
     }
 
+    pub fn draft_token_delta(&self) -> Option<i32> {
+        if self
+            .attachment
+            .delta
+            .custom_token_delta
+            .iter()
+            .any(|token| token.is_draft_token())
+        {
+            let sum = self
+                .attachment
+                .delta
+                .custom_token_delta
+                .iter()
+                .filter_map(|token| {
+                    if token.is_draft_token() {
+                        Some(token.delta)
+                    } else {
+                        None
+                    }
+                })
+                .sum::<i32>();
+
+            Some(sum)
+        } else {
+            None
+        }
+    }
+
+    pub fn orbs_delta(&self) -> Option<i32> {
+        if self
+            .attachment
+            .delta
+            .custom_token_delta
+            .iter()
+            .any(|token| token.is_orb_token())
+        {
+            let sum = self
+                .attachment
+                .delta
+                .custom_token_delta
+                .iter()
+                .filter_map(|token| {
+                    if token.is_orb_token() {
+                        Some(token.delta)
+                    } else {
+                        None
+                    }
+                })
+                .sum::<i32>();
+
+            Some(sum)
+        } else {
+            None
+        }
+    }
+
     pub fn vault_delta_percent(&self) -> f32 {
         let cards_vault_sum = self
             .attachment
@@ -256,7 +317,7 @@ impl InventoryUpdateResult {
             .aetherized_cards
             .iter()
             .filter_map(|card| {
-                if card.added_to_inventory {
+                if card.added_to_inventory && card.is_actual_card() {
                     Some(card.grp_id)
                 } else {
                     None
@@ -275,6 +336,30 @@ impl InventoryUpdateResult {
         } else {
             Some(self.attachment.delta.booster_delta.as_ref())
         }
+    }
+
+    pub fn art_skins_added(&self) -> Option<&Vec<ArtSkin>> {
+        if self.attachment.delta.art_skins_added.is_empty() {
+            None
+        } else {
+            Some(self.attachment.delta.art_skins_added.as_ref())
+        }
+    }
+
+    pub fn art_skins_removed(&self) -> Option<&Vec<ArtSkin>> {
+        self.attachment.delta.art_skins_removed.as_ref()
+    }
+
+    pub fn vanity_items_added(&self) -> Option<&Vec<String>> {
+        if self.attachment.delta.vanity_items_added.is_empty() {
+            None
+        } else {
+            Some(self.attachment.delta.vanity_items_added.as_ref())
+        }
+    }
+
+    pub fn vanity_items_removed(&self) -> Option<&Vec<String>> {
+        self.attachment.delta.vanity_items_removed.as_ref()
     }
 }
 
@@ -1360,6 +1445,19 @@ pub struct AetherizedCardInformation {
     // This is `None` for wildcards opened in boosters
     pub set: Option<String>,
 }
+impl AetherizedCardInformation {
+    const COMMON_WILDCARD_GRPID: u32 = 9;
+    const UNCOMMON_WILDCARD_GRPID: u32 = 8;
+    const RARE_WILDCARD_GRPID: u32 = 7;
+    const MYTHICRARE_WILDCARD_GRPID: u32 = 6;
+
+    fn is_actual_card(&self) -> bool {
+        return self.grp_id != AetherizedCardInformation::COMMON_WILDCARD_GRPID
+            && self.grp_id != AetherizedCardInformation::UNCOMMON_WILDCARD_GRPID
+            && self.grp_id != AetherizedCardInformation::RARE_WILDCARD_GRPID
+            && self.grp_id != AetherizedCardInformation::MYTHICRARE_WILDCARD_GRPID;
+    }
+}
 
 /// The context object for an inventory update.
 ///
@@ -1407,6 +1505,12 @@ pub struct ArtSkin {
     pub ccv: String,
 }
 
+impl ArtSkin {
+    pub fn logview_name(&self) -> String {
+        format!("{} - {}", self.ccv, self.art_id)
+    }
+}
+
 /// `TicketStack` describes a new ticket added or removed in an inventory update event.
 #[derive(Debug, Serialize, Deserialize, Hash, Clone)]
 pub struct TicketStack {
@@ -1438,6 +1542,16 @@ pub struct CustomTokenDeltaInfo {
     pub delta: i32,
 }
 
+impl CustomTokenDeltaInfo {
+    pub fn is_draft_token(&self) -> bool {
+        self.id == "DraftToken"
+    }
+
+    pub fn is_orb_token(&self) -> bool {
+        self.id.ends_with("_Orb")
+    }
+}
+
 /// `BoosterStack` describes the pack of cards in the inventory update event.
 ///
 /// Example attachment in the json body:
@@ -1455,7 +1569,7 @@ pub struct BoosterStack {
 }
 
 impl BoosterStack {
-    pub fn name_from_collation_id(&self) -> String {
+    pub fn short_name(&self) -> String {
         // This is coming from the `Wotc.Mtga.Wrapper.CollationMapping` type
         match self.collation_id {
             62242 => String::from("kld"),

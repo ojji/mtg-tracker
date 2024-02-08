@@ -1,19 +1,18 @@
 using System;
 using System.Threading.Tasks;
-using System.Security.Cryptography;
 using UnityEngine;
 using Wizards.Mtga.FrontDoorModels;
 using Newtonsoft.Json;
 using System.Threading;
 using System.Linq;
-using System.Collections.Generic;
-using System.Text;
+using Wizards.Models;
 
 namespace mtga_datacollector
 {
   public class CollectorEvent
   {
     public string Timestamp;
+    public string Source;
     public object Attachment;
   }
 
@@ -109,8 +108,110 @@ namespace mtga_datacollector
       {
         try
         {
-          WrapperController.Instance.InventoryManager.UnsubscribeFromAll(this.UpdateInventory);
-          WrapperController.Instance.InventoryManager.SubscribeToAll(this.UpdateInventory, true);
+          var inventoryManager = WrapperController.Instance.InventoryManager;
+
+          inventoryManager.Subscribe(InventoryUpdateSource.Unknown, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "Unknown"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.QuestReward, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "QuestReward"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.DailyWins, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "DailyWins"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.WeeklyWins, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "WeeklyWins"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.LoginGrant, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "LoginGrant"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.BattlePassLevelUp, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "BattlePassLevelUp"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.BattlePassLevelMasteryTree, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "BattlePassLevelMasteryTree"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.EarlyPlayerProgressionLevelUp, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "EarlyPlayerProgressionLevelUp"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.EarlyPlayerProgressionMasteryTree, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "EarlyPlayerProgressionMasteryTree"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.ProgressionRewardTierAdd, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "ProgressionRewardTierAdd"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.RenewalReward, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "RenewalReward"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.MercantilePurchase, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "MercantilePurchase"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.MercantileChestPurchase, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "MercantileChestPurchase"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.MercantileBoosterPurchase, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "MercantileBoosterPurchase"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.EventReward, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "EventReward"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.RedeemVoucher, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "RedeemVoucher"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.ModifyPlayerInventory, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "ModifyPlayerInventory"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.OpenChest, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "OpenChest"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.MassOpenChest, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "MassOpenChest"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.BasicLandSetUpdate, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "BasicLandSetUpdate"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CompleteVault, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CompleteVault"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CosmeticPurchase, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CosmeticPurchase"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.WildCardRedemption, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "WildCardRedemption"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.BoosterOpen, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "BoosterOpen"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.StarterDeckUpgrade, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "StarterDeckUpgrade"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.RankedSeasonReward, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "RankedSeasonReward"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.EventPayEntry, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "EventPayEntry"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.BannedCardGrant, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "BannedCardGrant"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.EventEntryReward, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "EventEntryReward"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CatalogPurchase, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CatalogPurchase"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CampaignGraphReward, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CampaignGraphReward"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.EventRefundEntry, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "EventRefundEntry"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.Cleanup, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "Cleanup"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.IdEmpotentLoginGrant, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "IdEmpotentLoginGrant"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CustomerSupportGrant, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CustomerSupportGrant"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.EntryReward, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "EntryReward"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.EventGrantCardPool, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "EventGrantCardPool"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CampaignGraphPayoutNode, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CampaignGraphPayoutNode"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CampaignGraphAutomaticPayoutNode, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CampaignGraphAutomaticPayoutNode"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CampaignGraphPurchaseNode, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CampaignGraphPurchaseNode"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.CampaignGraphTieredRewardNode, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "CampaignGraphTieredRewardNode"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.AccumulativePayoutNode, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "AccumulativePayoutNode"); }), publish: false);
+          inventoryManager.Subscribe(InventoryUpdateSource.Letter, new Action<ClientInventoryUpdateReportItem>(item => { UpdateInventory(item, "Letter"); }), publish: false);
+
+          /*
+           *Unknown,
+  QuestReward,
+  DailyWins,
+  WeeklyWins,
+  LoginGrant,
+  BattlePassLevelUp,
+  BattlePassLevelMasteryTree,
+  EarlyPlayerProgressionLevelUp,
+  EarlyPlayerProgressionMasteryTree,
+  ProgressionRewardTierAdd,
+  RenewalReward,
+  MercantilePurchase,
+  MercantileChestPurchase,
+  MercantileBoosterPurchase,
+  EventReward,
+  RedeemVoucher,
+  ModifyPlayerInventory,
+  OpenChest,
+  MassOpenChest,
+  BasicLandSetUpdate,
+  CompleteVault,
+  CosmeticPurchase,
+  WildCardRedemption,
+  BoosterOpen,
+  StarterDeckUpgrade,
+  RankedSeasonReward,
+  EventPayEntry,
+  BannedCardGrant,
+  EventEntryReward,
+  CatalogPurchase,
+  CampaignGraphReward,
+  EventRefundEntry,
+  Cleanup,
+  IdEmpotentLoginGrant,
+  CustomerSupportGrant,
+  EntryReward,
+  EventGrantCardPool,
+  CampaignGraphPayoutNode,
+  CampaignGraphAutomaticPayoutNode,
+  CampaignGraphPurchaseNode,
+  CampaignGraphTieredRewardNode,
+  AccumulativePayoutNode,
+  Letter
+           */
+
+          //inventoryManager.Subscribe(InventoryUpdateSource.MercantilePurchase, new Action<ClientInventoryUpdateReportItem>(this.OnMercantilePurchase), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.MercantileChestPurchase, new Action<ClientInventoryUpdateReportItem>(this.OnMercantileChestPurchase), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.CatalogPurchase, new Action<ClientInventoryUpdateReportItem>(this.OnCatalogPurchase), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.MercantileBoosterPurchase, new Action<ClientInventoryUpdateReportItem>(this.OnInventoryUpdateFromPurchase), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.CosmeticPurchase, new Action<ClientInventoryUpdateReportItem>(this.OnInventoryUpdateFromPurchase), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.ModifyPlayerInventory, new Action<ClientInventoryUpdateReportItem>(this.OnModifyPlayerInventory), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.CustomerSupportGrant, new Action<ClientInventoryUpdateReportItem>(this.OnInventoryUpdate), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.OpenChest, new Action<ClientInventoryUpdateReportItem>(this.OnRedeemInventory), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.CampaignGraphPayoutNode, new Action<ClientInventoryUpdateReportItem>(this.OnRedeemInventory), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.AccumulativePayoutNode, new Action<ClientInventoryUpdateReportItem>(this.OnRedeemInventory), publish: false);
+          //inventoryManager.Subscribe(InventoryUpdateSource.EventRefundEntry, new Action<ClientInventoryUpdateReportItem>(this.OnEventRefunded));
+          //inventoryManager.InventoryUpdated += new Action(this.InventoryManager_InventoryUpdated);
           _subscribedToInventory = true;
 
           Task.Run(PeriodicUpdater);
@@ -164,11 +265,12 @@ namespace mtga_datacollector
       PeriodicUpdater();
     }
 
-    private void UpdateInventory(ClientInventoryUpdateReportItem payload)
+    private void UpdateInventory(ClientInventoryUpdateReportItem payload, string source)
     {
       CollectorEvent inventoryUpdate = new CollectorEvent
       {
         Timestamp = String.Format($"{DateTime.Now:O}"),
+        Source = source,
         Attachment = payload
       };
 
