@@ -641,7 +641,9 @@ impl MtgaDb {
             "alex kintner" => "alexander kintner",
             "mónica robles corzo aka monarobot" => "mónica robles corzo",
             "josiah “jo” cameron" => "josiah \"jo\" cameron",
-            "néstor ossandón leal" => "nestor ossandon leal",
+            "nestor ossandon leal" => "néstor ossandón leal",
+            "dan scott" => "dan murayama scott",
+            "zuzanna wuzyk" => "zuzanna wużyk",
             _ => mtga_artist_name,
         }
     }
@@ -1154,7 +1156,7 @@ impl MtgaDb {
             "xln" | "rix" | "dom" | "m19" | "grn" | "rna" | "war" | "m20" | "eld" | "thb"
             | "iko" | "m21" | "stx" | "neo" | "mkm" => Ok((7.0 / 8.0, 1.0 / 8.0)), // 1:8
             "znr" | "khm" | "mid" | "vow" => Ok((6.4 / 7.4, 1.0 / 7.4)), // 1:7.4
-            "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" | "woe" => {
+            "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" | "woe" | "otj" => {
                 Ok((6.0 / 7.0, 1.0 / 7.0))
             } // 1:7
             "lci" => Ok((5.8 / 6.8, 1.0 / 6.8)),                         // 1:6.8
