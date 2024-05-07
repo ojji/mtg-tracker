@@ -14,6 +14,16 @@
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </Reference>
+    <Reference Include="SharedClientCore">
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\SharedClientCore.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
+    <Reference Include="Wizards.MDN.GreProtobuf">
+      <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\Wizards.MDN.GreProtobuf.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>d:\teljes\MTGA\MTGA_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
