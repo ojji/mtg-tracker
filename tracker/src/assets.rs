@@ -47,3 +47,4 @@ pub const COMMON_WC_ICON: &[u8] = include_bytes!("../assets/symbols/common_wc.pn
 pub const UNCOMMON_WC_ICON: &[u8] = include_bytes!("../assets/symbols/uncommon_wc.png");
 pub const RARE_WC_ICON: &[u8] = include_bytes!("../assets/symbols/rare_wc.png");
 pub const MYTHIC_WC_ICON: &[u8] = include_bytes!("../assets/symbols/mythic_wc.png");
+pub const MH3_HIDEAWAY_TICKET_ICON: &[u8] = include_bytes!("../assets/symbols/mh3_hideaway.png");

@@ -267,6 +267,34 @@ impl InventoryUpdateResult {
         }
     }
 
+    pub fn mh3_hideaway_tickets_delta(&self) -> Option<i32> {
+        if self
+            .attachment
+            .delta
+            .custom_token_delta
+            .iter()
+            .any(|token| token.is_mh3_hideaway_token())
+        {
+            let sum = self
+                .attachment
+                .delta
+                .custom_token_delta
+                .iter()
+                .filter_map(|token| {
+                    if token.is_mh3_hideaway_token() {
+                        Some(token.delta)
+                    } else {
+                        None
+                    }
+                })
+                .sum::<i32>();
+
+            Some(sum)
+        } else {
+            None
+        }
+    }
+
     pub fn orbs_delta(&self) -> Option<i32> {
         if self
             .attachment
@@ -1549,6 +1577,10 @@ impl CustomTokenDeltaInfo {
 
     pub fn is_orb_token(&self) -> bool {
         self.id.ends_with("_Orb")
+    }
+
+    pub fn is_mh3_hideaway_token(&self) -> bool {
+        self.id == "MH3PrizeWall_Ticket"
     }
 }
 

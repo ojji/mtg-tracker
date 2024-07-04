@@ -141,6 +141,19 @@ impl LogEntry {
                         .into()
                     });
 
+                let mh3_hideaway_element: Option<Element<TrackerMessage>> = inventory_update
+                    .mh3_hideaway_tickets_delta()
+                    .map(|hideaway_ticket_delta| {
+                        row![
+                            image(image::Handle::from_memory(assets::MH3_HIDEAWAY_TICKET_ICON))
+                                .height(30.0),
+                            text(format!("{:+}", hideaway_ticket_delta))
+                        ]
+                        .spacing(3.0)
+                        .align_items(iced::Alignment::Center)
+                        .into()
+                    });
+
                 let draft_token_element: Option<Element<TrackerMessage>> = inventory_update
                     .draft_token_delta()
                     .map(|draft_token_delta| {
@@ -388,6 +401,7 @@ impl LogEntry {
                         uncommon_wc_element,
                         rare_wc_element,
                         mythic_wc_element,
+                        mh3_hideaway_element,
                         vanity_element,
                         style_element,
                         cards_element,
