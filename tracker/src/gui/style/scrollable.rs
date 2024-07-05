@@ -1,10 +1,10 @@
 use iced::{
-    widget::scrollable::{Scrollbar, Scroller, StyleSheet},
-    Background, BorderRadius, Color,
+    widget::scrollable::{Scroller, StyleSheet},
+    Background, Color,
 };
 
 use crate::gui::{
-    style::{SCROLLABLE_BACKGROUND_COLOR, HOVERED_SCROLLER_COLOR, SCROLLER_COLOR},
+    style::{HOVERED_SCROLLER_COLOR, SCROLLABLE_BACKGROUND_COLOR, SCROLLER_COLOR},
     TrackerTheme,
 };
 
@@ -17,18 +17,26 @@ pub enum ScrollableStyle {
 impl StyleSheet for TrackerTheme {
     type Style = ScrollableStyle;
 
-    fn active(&self, _style: &Self::Style) -> Scrollbar {
-        iced::widget::scrollable::Scrollbar {
-            border_color: Color::TRANSPARENT,
-            background: Some(Background::Color(SCROLLABLE_BACKGROUND_COLOR)),
-            border_radius: BorderRadius::from(0.0),
-            border_width: 0.0,
-            scroller: Scroller {
-                border_width: 0.0,
-                border_radius: BorderRadius::from(5.0),
-                border_color: SCROLLER_COLOR,
-                color: SCROLLER_COLOR,
+    fn active(&self, _style: &Self::Style) -> iced::widget::scrollable::Appearance {
+        iced::widget::scrollable::Appearance {
+            container: iced::widget::container::Appearance::default(),
+            scrollbar: iced::widget::scrollable::Scrollbar {
+                background: Some(Background::Color(SCROLLABLE_BACKGROUND_COLOR)),
+                border: iced::Border {
+                    color: Color::TRANSPARENT,
+                    width: 0.0,
+                    radius: iced::border::Radius::from(0.0),
+                },
+                scroller: Scroller {
+                    color: SCROLLER_COLOR,
+                    border: iced::Border {
+                        color: SCROLLER_COLOR,
+                        width: 0.0,
+                        radius: iced::border::Radius::from(5.0),
+                    },
+                },
             },
+            gap: None,
         }
     }
 
@@ -36,32 +44,48 @@ impl StyleSheet for TrackerTheme {
         &self,
         _style: &Self::Style,
         is_mouse_over_scrollbar: bool,
-    ) -> iced::widget::scrollable::Scrollbar {
+    ) -> iced::widget::scrollable::Appearance {
         if is_mouse_over_scrollbar {
-            iced::widget::scrollable::Scrollbar {
-                border_color: Color::TRANSPARENT,
-                background: Some(Background::Color(SCROLLABLE_BACKGROUND_COLOR)),
-                border_radius: BorderRadius::from(0.0),
-                border_width: 0.0,
-                scroller: Scroller {
-                    border_width: 0.0,
-                    border_radius: BorderRadius::from(5.0),
-                    border_color: HOVERED_SCROLLER_COLOR,
-                    color: HOVERED_SCROLLER_COLOR,
+            iced::widget::scrollable::Appearance {
+                container: iced::widget::container::Appearance::default(),
+                scrollbar: iced::widget::scrollable::Scrollbar {
+                    background: Some(Background::Color(SCROLLABLE_BACKGROUND_COLOR)),
+                    border: iced::Border {
+                        color: Color::TRANSPARENT,
+                        width: 0.0,
+                        radius: iced::border::Radius::from(0.0),
+                    },
+                    scroller: iced::widget::scrollable::Scroller {
+                        color: HOVERED_SCROLLER_COLOR,
+                        border: iced::Border {
+                            color: HOVERED_SCROLLER_COLOR,
+                            width: 0.0,
+                            radius: iced::border::Radius::from(5.0),
+                        },
+                    },
                 },
+                gap: None,
             }
         } else {
-            iced::widget::scrollable::Scrollbar {
-                border_color: Color::TRANSPARENT,
-                background: Some(Background::Color(SCROLLABLE_BACKGROUND_COLOR)),
-                border_radius: BorderRadius::from(0.0),
-                border_width: 0.0,
-                scroller: Scroller {
-                    border_width: 0.0,
-                    border_radius: BorderRadius::from(5.0),
-                    border_color: SCROLLER_COLOR,
-                    color: SCROLLER_COLOR,
+            iced::widget::scrollable::Appearance {
+                container: iced::widget::container::Appearance::default(),
+                scrollbar: iced::widget::scrollable::Scrollbar {
+                    background: Some(Background::Color(SCROLLABLE_BACKGROUND_COLOR)),
+                    border: iced::Border {
+                        color: Color::TRANSPARENT,
+                        width: 0.0,
+                        radius: iced::border::Radius::from(0.0),
+                    },
+                    scroller: iced::widget::scrollable::Scroller {
+                        color: SCROLLER_COLOR,
+                        border: iced::Border {
+                            color: SCROLLER_COLOR,
+                            width: 0.0,
+                            radius: iced::border::Radius::from(5.0),
+                        },
+                    },
                 },
+                gap: None,
             }
         }
     }

@@ -463,7 +463,7 @@ pub fn run(config: &ParseParams) -> Result<()> {
             database_path: config.database_path.clone(),
         },
         window: iced::window::Settings {
-            min_size: Some((1150, 800)),
+            min_size: Some(iced::Size::new(1150.0, 800.0)),
             //TODO: app icon icon: todo!(),
             ..Default::default()
         },
@@ -471,9 +471,9 @@ pub fn run(config: &ParseParams) -> Result<()> {
             family: iced::font::Family::SansSerif,
             weight: iced::font::Weight::Bold,
             stretch: iced::font::Stretch::Normal,
-            monospaced: false,
+            style: iced::font::Style::Normal,
         },
-        default_text_size: 11.0,
+        default_text_size: iced::Pixels(11.0),
         ..Default::default()
     };
 

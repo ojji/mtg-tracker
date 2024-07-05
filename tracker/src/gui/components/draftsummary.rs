@@ -318,7 +318,7 @@ impl DraftSummaryComponent {
                     .width(Length::FillPortion(25))
                     .align_x(Horizontal::Center),
             ],
-            vertical_space(Length::Fixed(25.0)),
+            vertical_space().height(25),
             row![
                 container(text("Rares needed:").size(16))
                     .padding(5)
@@ -397,7 +397,7 @@ impl DraftSummaryComponent {
                     .width(Length::FillPortion(25))
                     .align_x(Horizontal::Center),
             ],
-            vertical_space(Length::Fixed(25.0)),
+            vertical_space().height(25),
             row![
                 container(text("Mythics needed:").size(16))
                     .padding(5)
@@ -432,7 +432,7 @@ impl DraftSummaryComponent {
                 .padding(5)
                 .width(Length::FillPortion(35))
                 .align_x(Horizontal::Center),
-                horizontal_space(Length::Fixed(50.0)),
+                horizontal_space().width(50),
                 container(text("Total Spent (gems):").size(16))
                     .padding(5)
                     .width(Length::FillPortion(65))
@@ -451,7 +451,7 @@ impl DraftSummaryComponent {
                     .padding(5)
                     .width(Length::FillPortion(35))
                     .align_x(Horizontal::Center),
-                horizontal_space(Length::Fixed(50.0)),
+                horizontal_space().width(50),
                 container(text("Cost per Pack (gems):").size(16))
                     .padding(5)
                     .width(Length::FillPortion(65))
@@ -470,7 +470,7 @@ impl DraftSummaryComponent {
                     .padding(5)
                     .width(Length::FillPortion(35))
                     .align_x(Horizontal::Center),
-                horizontal_space(Length::Fixed(50.0)),
+                horizontal_space().width(50),
                 container(text("Total Spent (gold):").size(16))
                     .padding(5)
                     .width(Length::FillPortion(65))
@@ -489,7 +489,7 @@ impl DraftSummaryComponent {
                     .padding(5)
                     .width(Length::FillPortion(35))
                     .align_x(Horizontal::Center),
-                horizontal_space(Length::Fixed(50.0)),
+                horizontal_space().width(50),
                 container(text("Cost per Pack (gold):").size(16))
                     .padding(5)
                     .width(Length::FillPortion(65))

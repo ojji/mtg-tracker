@@ -17,18 +17,24 @@ impl iced::widget::button::StyleSheet for TrackerTheme {
             ButtonStyle::SetSelector => iced::widget::button::Appearance {
                 shadow_offset: Vector::default(),
                 background: None,
-                border_radius: 0.0.into(),
-                border_width: 0.0,
-                border_color: Color::TRANSPARENT,
+                border: iced::Border {
+                    color: Color::TRANSPARENT,
+                    width: 0.0,
+                    radius: iced::border::Radius::from(0.0),
+                },
                 text_color: Color::BLACK,
+                ..Default::default()
             },
             ButtonStyle::Default => iced::widget::button::Appearance {
                 shadow_offset: Vector::default(),
                 background: Some(Background::Color(DEFAULT_BUTTON_BACKGROUND_COLOR)),
-                border_radius: 2.0.into(),
-                border_width: 1.0,
-                border_color: Color::BLACK,
+                border: iced::Border {
+                    color: Color::BLACK,
+                    width: 1.0,
+                    radius: iced::border::Radius::from(2.0),
+                },
                 text_color: Color::BLACK,
+                ..Default::default()
             },
         }
     }

@@ -1,5 +1,5 @@
-use crate::gui::{style::TOOLTIP_BACKGROUND_COLOR, style::BOX_BACKGROUND_COLOR, TrackerTheme};
-use iced::{widget::container::Appearance, Background, BorderRadius, Color};
+use crate::gui::{style::BOX_BACKGROUND_COLOR, style::TOOLTIP_BACKGROUND_COLOR, TrackerTheme};
+use iced::{widget::container::Appearance, Background, Color};
 
 #[derive(Default)]
 pub enum ContainerStyle {
@@ -18,24 +18,30 @@ impl iced::widget::container::StyleSheet for TrackerTheme {
             ContainerStyle::Default => Appearance::default(),
             ContainerStyle::Tooltip => Appearance {
                 background: Some(Background::Color(TOOLTIP_BACKGROUND_COLOR)),
-                border_radius: BorderRadius::from(2.0),
-                border_width: 1.0,
-                border_color: Color::BLACK,
+                border: iced::Border {
+                    color: Color::BLACK,
+                    width: 1.0,
+                    radius: iced::border::Radius::from(2.0),
+                },
                 ..Default::default()
             },
             ContainerStyle::SummaryPanel => Appearance {
-                border_width: 1.0,
-                border_color: Color::BLACK,
+                border: iced::Border {
+                    color: Color::BLACK,
+                    width: 1.0,
+                    radius: iced::border::Radius::default(),
+                },
                 ..Default::default()
             },
-            ContainerStyle::Box => {
-                Appearance {
-                    text_color: None,
-                    background: Some(Background::Color(BOX_BACKGROUND_COLOR)),
-                    border_radius: 2.0.into(),
-                    border_width: 0.0,
-                    border_color: Color::TRANSPARENT,
-                }
+            ContainerStyle::Box => Appearance {
+                text_color: None,
+                background: Some(Background::Color(BOX_BACKGROUND_COLOR)),
+                border: iced::Border {
+                    color: Color::TRANSPARENT,
+                    width: 0.0,
+                    radius: iced::border::Radius::from(2.0),
+                },
+                ..Default::default()
             },
         }
     }

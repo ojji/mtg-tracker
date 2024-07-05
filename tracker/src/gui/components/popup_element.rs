@@ -3,21 +3,21 @@ use iced::{
     Element, Point, Rectangle,
 };
 
-pub struct PopupElement<'a, Message, Renderer> {
-    base: Element<'a, Message, Renderer>,
-    popup: Element<'a, Message, Renderer>,
+pub struct PopupElement<'a, Message, Theme, Renderer> {
+    base: Element<'a, Message, Theme, Renderer>,
+    popup: Element<'a, Message, Theme, Renderer>,
     on_hovered: Option<Message>,
     on_idle: Option<Message>,
     ideal_cursor_margin: f32,
     min_cursor_margin: f32,
 }
 
-impl<'a, Message, Renderer> PopupElement<'a, Message, Renderer> {
+impl<'a, Message, Theme, Renderer> PopupElement<'a, Message, Theme, Renderer> {
     const DEFAULT_MIN_CURSOR_MARGIN: f32 = 1.0;
     const DEFAULT_IDEAL_CURSOR_MARGIN: f32 = 10.0;
     pub fn new(
-        base: impl Into<Element<'a, Message, Renderer>>,
-        popup: impl Into<Element<'a, Message, Renderer>>,
+        base: impl Into<Element<'a, Message, Theme, Renderer>>,
+        popup: impl Into<Element<'a, Message, Theme, Renderer>>,
     ) -> Self {
         PopupElement {
             base: base.into(),
@@ -58,37 +58,36 @@ impl<'a, Message, Renderer> PopupElement<'a, Message, Renderer> {
     }
 }
 
-impl<'a, Message, Renderer> Widget<Message, Renderer> for PopupElement<'a, Message, Renderer>
+impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for PopupElement<'a, Message, Theme, Renderer>
 where
     Renderer: iced::advanced::Renderer,
-    Renderer::Theme: iced::widget::container::StyleSheet,
     Message: Clone,
 {
-    fn width(&self) -> iced::Length {
-        self.base.as_widget().width()
-    }
-
-    fn height(&self) -> iced::Length {
-        self.base.as_widget().height()
+    fn size(&self) -> iced::Size<iced::Length> {
+        self.base.as_widget().size()
     }
 
     fn layout(
         &self,
+        tree: &mut Tree,
         renderer: &Renderer,
         limits: &iced::advanced::layout::Limits,
     ) -> iced::advanced::layout::Node {
-        self.base.as_widget().layout(renderer, limits)
+        self.base
+            .as_widget()
+            .layout(&mut tree.children[0], renderer, limits)
     }
 
     fn draw(
         &self,
-        state: &iced::advanced::widget::Tree,
+        state: &Tree,
         renderer: &mut Renderer,
-        theme: &Renderer::Theme,
+        theme: &Theme,
         style: &iced::advanced::renderer::Style,
         layout: iced::advanced::Layout<'_>,
         cursor: iced::advanced::mouse::Cursor,
-        viewport: &iced::Rectangle,
+        viewport: &Rectangle,
     ) {
         self.base.as_widget().draw(
             &state.children[0],
@@ -101,6 +100,10 @@ where
         );
     }
 
+    fn size_hint(&self) -> iced::Size<iced::Length> {
+        self.size()
+    }
+
     fn tag(&self) -> iced::advanced::widget::tree::Tag {
         iced::advanced::widget::tree::Tag::of::<State>()
     }
@@ -109,20 +112,17 @@ where
         iced::advanced::widget::tree::State::new(State::default())
     }
 
-    fn children(&self) -> Vec<iced::advanced::widget::Tree> {
-        vec![
-            iced::advanced::widget::Tree::new(&self.base),
-            iced::advanced::widget::Tree::new(&self.popup),
-        ]
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.base), Tree::new(&self.popup)]
     }
 
-    fn diff(&self, tree: &mut iced::advanced::widget::Tree) {
+    fn diff(&self, tree: &mut Tree) {
         tree.diff_children(&[&self.base, &self.popup])
     }
 
     fn operate(
         &self,
-        tree: &mut iced::advanced::widget::Tree,
+        tree: &mut Tree,
         layout: iced::advanced::Layout<'_>,
         renderer: &Renderer,
         operation: &mut dyn iced::advanced::widget::Operation<Message>,
@@ -134,15 +134,15 @@ where
 
     fn on_event(
         &mut self,
-        tree: &mut iced::advanced::widget::Tree,
+        tree: &mut Tree,
         event: iced::Event,
         layout: iced::advanced::Layout<'_>,
         cursor: iced::advanced::mouse::Cursor,
         renderer: &Renderer,
         clipboard: &mut dyn iced::advanced::Clipboard,
         shell: &mut iced::advanced::Shell<'_, Message>,
-        viewport: &iced::Rectangle,
-    ) -> iced::event::Status {
+        viewport: &Rectangle,
+    ) -> iced_futures::core::event::Status {
         let state = tree.state.downcast_mut::<State>();
 
         let new_state = cursor
@@ -183,10 +183,10 @@ where
 
     fn mouse_interaction(
         &self,
-        tree: &iced::advanced::widget::Tree,
+        tree: &Tree,
         layout: iced::advanced::Layout<'_>,
         cursor: iced::advanced::mouse::Cursor,
-        viewport: &iced::Rectangle,
+        viewport: &Rectangle,
         renderer: &Renderer,
     ) -> iced::advanced::mouse::Interaction {
         self.base.as_widget().mouse_interaction(
@@ -200,10 +200,11 @@ where
 
     fn overlay<'b>(
         &'b mut self,
-        tree: &'b mut iced::advanced::widget::Tree,
+        tree: &'b mut Tree,
         layout: iced::advanced::Layout<'_>,
         renderer: &Renderer,
-    ) -> Option<iced::advanced::overlay::Element<'b, Message, Renderer>> {
+        translation: iced::Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, Message, Theme, Renderer>> {
         let state = tree.state.downcast_ref::<State>();
 
         let (content_state, popup_state) = {
@@ -211,28 +212,26 @@ where
             (&mut a[0], &mut b[0])
         };
 
-        let content_overlay = self
-            .base
-            .as_widget_mut()
-            .overlay(content_state, layout, renderer);
+        let content_overlay =
+            self.base
+                .as_widget_mut()
+                .overlay(content_state, layout, renderer, translation);
 
         let popup_overlay = if let State::Hovered { cursor_position } = *state {
-            Some(iced::advanced::overlay::Element::new(
-                layout.bounds().position(),
-                Box::new(Overlay {
-                    popup_content: &mut self.popup,
-                    tree: popup_state,
-                    base_bounds: layout.bounds(),
-                    cursor_position,
-                    min_cursor_margin: self.min_cursor_margin,
-                    ideal_cursor_margin: self.ideal_cursor_margin,
-                }),
-            ))
+            Some(iced::advanced::overlay::Element::new(Box::new(Overlay {
+                position: layout.position() + translation,
+                popup_content: &mut self.popup,
+                tree: popup_state,
+                base_bounds: layout.bounds(),
+                cursor_position,
+                min_cursor_margin: self.min_cursor_margin,
+                ideal_cursor_margin: self.ideal_cursor_margin,
+            })))
         } else {
             None
         };
 
-        let children: Vec<iced::advanced::overlay::Element<'_, Message, Renderer>> =
+        let children: Vec<iced::advanced::overlay::Element<'_, Message, Theme, Renderer>> =
             content_overlay.into_iter().chain(popup_overlay).collect();
 
         (!children.is_empty())
@@ -240,14 +239,14 @@ where
     }
 }
 
-impl<'a, Message, Renderer> From<PopupElement<'a, Message, Renderer>>
-    for Element<'a, Message, Renderer>
+impl<'a, Message, Theme, Renderer> From<PopupElement<'a, Message, Theme, Renderer>>
+    for Element<'a, Message, Theme, Renderer>
 where
-    Renderer: iced::advanced::Renderer + 'a,
-    Renderer::Theme: iced::widget::container::StyleSheet,
+    Renderer: 'a + iced::advanced::Renderer,
+    Theme: 'a,
     Message: 'a + Clone,
 {
-    fn from(value: PopupElement<'a, Message, Renderer>) -> Self {
+    fn from(value: PopupElement<'a, Message, Theme, Renderer>) -> Self {
         Element::new(value)
     }
 }
@@ -261,31 +260,30 @@ enum State {
     },
 }
 
-struct Overlay<'a, 'b, Message, Renderer> {
-    popup_content: &'b mut Element<'a, Message, Renderer>,
+struct Overlay<'a, 'b, Message, Theme, Renderer> {
+    popup_content: &'b mut Element<'a, Message, Theme, Renderer>,
     tree: &'b mut Tree,
+    position: Point,
     cursor_position: Point,
     min_cursor_margin: f32,
     ideal_cursor_margin: f32,
     base_bounds: Rectangle,
 }
 
-impl<'a, 'b, Message, Renderer> iced::advanced::Overlay<Message, Renderer>
-    for Overlay<'a, 'b, Message, Renderer>
+impl<'a, 'b, Message, Theme, Renderer> iced::advanced::Overlay<Message, Theme, Renderer>
+    for Overlay<'a, 'b, Message, Theme, Renderer>
 where
     Renderer: iced::advanced::Renderer,
 {
-    fn layout(
-        &self,
-        renderer: &Renderer,
-        bounds: iced::Size,
-        position: Point,
-    ) -> iced::advanced::layout::Node {
+    fn layout(&mut self, renderer: &Renderer, bounds: iced::Size) -> iced::advanced::layout::Node {
         let limits = iced::advanced::layout::Limits::new(iced::Size::ZERO, iced::Size::INFINITY);
-        let content_layout = self.popup_content.as_widget().layout(renderer, &limits);
+        let content_layout =
+            self.popup_content
+                .as_widget()
+                .layout(&mut self.tree, renderer, &limits);
         let content_bounds = {
             let content_bounds = content_layout.bounds();
-            let translation = position - self.base_bounds.position();
+            let translation = self.position - self.base_bounds.position();
             let real_cursor_position = Point::new(
                 self.cursor_position.x + translation.x,
                 self.cursor_position.y + translation.y,
@@ -336,13 +334,13 @@ where
     fn draw(
         &self,
         renderer: &mut Renderer,
-        theme: &<Renderer as iced::advanced::Renderer>::Theme,
+        theme: &Theme,
         style: &iced::advanced::renderer::Style,
         layout: iced::advanced::Layout<'_>,
         cursor: iced::advanced::mouse::Cursor,
     ) {
         self.popup_content.as_widget().draw(
-            self.tree,
+            &self.tree,
             renderer,
             theme,
             style,
@@ -359,7 +357,7 @@ where
         operation: &mut dyn iced::advanced::widget::Operation<Message>,
     ) {
         self.popup_content.as_widget_mut().operate(
-            self.tree,
+            &mut self.tree,
             layout.children().next().unwrap(),
             renderer,
             operation,
@@ -374,9 +372,9 @@ where
         renderer: &Renderer,
         clipboard: &mut dyn iced::advanced::Clipboard,
         shell: &mut iced::advanced::Shell<'_, Message>,
-    ) -> iced::event::Status {
+    ) -> iced_futures::core::event::Status {
         self.popup_content.as_widget_mut().on_event(
-            self.tree,
+            &mut self.tree,
             event,
             layout,
             cursor,
@@ -391,11 +389,11 @@ where
         &self,
         layout: iced::advanced::Layout<'_>,
         cursor: iced::advanced::mouse::Cursor,
-        viewport: &iced::Rectangle,
+        viewport: &Rectangle,
         renderer: &Renderer,
     ) -> iced::advanced::mouse::Interaction {
         self.popup_content.as_widget().mouse_interaction(
-            self.tree,
+            &self.tree,
             layout.children().next().unwrap(),
             cursor,
             viewport,
