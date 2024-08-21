@@ -76,7 +76,7 @@ impl MtgaDb {
                             == scry_card.unreversed_lowercase_name()
                         && scry_card.is_available_in_arena()
                         && scry_card.lowercase_artist().is_some()
-                        && scry_card.set() == mtga_card.set()
+                        && scry_card.set() == &mtga_card.set()
                         && scry_card.lowercase_artist().unwrap()
                             == MtgaDb::map_lowercase_mtga_artist_name_to_scry(
                                 mtga_card.lowercase_artist().as_str(),
@@ -262,7 +262,7 @@ impl MtgaDb {
         let results = scry_cards_db
             .iter()
             .filter(|&scry_card| {
-                scry_card.set() == mtga_card.set()
+                scry_card.set() == &mtga_card.set()
                     && scry_card.collector_number() == mtga_card.collector_number()
             })
             .collect::<Vec<&ScryCard>>();
@@ -316,31 +316,47 @@ impl MtgaDb {
             }
         }
 
-        // Try to find the card in the same set, but with a different collector number.
+        // Try to find the card in the same set or if its an alchemy card in the original set, but with a different collector number.
         // Some cards is the digital varieties have inconsistent collector numbers eg. `Spider Spawning` in `ha4`
         // or `A-Young Blue Dragon // A-Sand Augury` in `hbg`.
-
-        let results = scry_cards_db
-            .iter()
-            .filter(|&scry_card| {
-                scry_card.unreversed_lowercase_name() == mtga_card_name
-                    && scry_card.set() == mtga_card.set()
-                    && scry_card.lowercase_artist().is_some()
-                    && scry_card.lowercase_artist().unwrap()
-                        == MtgaDb::map_lowercase_mtga_artist_name_to_scry(
-                            mtga_card.lowercase_artist().as_str(),
-                        )
-                    && scry_card.lang() == "en"
-            })
-            .collect::<Vec<&ScryCard>>();
+        let results = if !mtga_card.is_alchemy_card() {
+            scry_cards_db
+                .iter()
+                .filter(|&scry_card| {
+                    scry_card.unreversed_lowercase_name() == mtga_card_name
+                        && scry_card.set() == &mtga_card.set()
+                        && scry_card.lowercase_artist().is_some()
+                        && scry_card.lowercase_artist().unwrap()
+                            == MtgaDb::map_lowercase_mtga_artist_name_to_scry(
+                                mtga_card.lowercase_artist().as_str(),
+                            )
+                        && scry_card.lang() == "en"
+                })
+                .collect::<Vec<&ScryCard>>()
+        } else {
+            scry_cards_db
+                .iter()
+                .filter(|&scry_card| {
+                    scry_card.unreversed_lowercase_name() == mtga_card_name
+                        && scry_card.set() == mtga_card.non_alchemy_set()
+                        && scry_card.lowercase_artist().is_some()
+                        && scry_card.lowercase_artist().unwrap()
+                            == MtgaDb::map_lowercase_mtga_artist_name_to_scry(
+                                mtga_card.lowercase_artist().as_str(),
+                            )
+                        && scry_card.lang() == "en"
+                })
+                .collect::<Vec<&ScryCard>>()
+        };
         match results.len() {
             0 => (),
             1 => {
                 let scry_card = results[0];
                 println!(
-                    "warning: {} ({}/{}) ({}) has different collector_id than {}",
+                    "warning: {} ({} or {}/{}) ({}) has different collector_id than {}",
                     mtga_card_name,
                     mtga_card.set(),
+                    mtga_card.non_alchemy_set(),
                     mtga_card.collector_number(),
                     MtgaDb::map_lowercase_mtga_artist_name_to_scry(
                         mtga_card.lowercase_artist().as_str()
@@ -352,14 +368,26 @@ impl MtgaDb {
             _ => {
                 let scry_card_names: Vec<String> = results.iter().map(|c| c.to_string()).collect();
                 let scry_card_names = scry_card_names.join(", ");
-                panic!(
-                        "warning: searching for {} ({}/{}) ({}) resulted these possible cards in the scry_db: {}",
+                println!(
+                        "warning: searching for {} ({} or {}/{}) ({}) resulted these possible cards in the scry_db: {}",
                         mtga_card_name,
                         mtga_card.set(),
+                        mtga_card.non_alchemy_set(),
                         mtga_card.collector_number(),
                         MtgaDb::map_lowercase_mtga_artist_name_to_scry(mtga_card.lowercase_artist().as_str()),
                         scry_card_names
                     );
+
+                let first = results.first().unwrap();
+                println!(
+                    "taking the first: {} ({} or {}/{}) is not {}",
+                    mtga_card_name,
+                    mtga_card.set(),
+                    mtga_card.non_alchemy_set(),
+                    mtga_card.collector_number(),
+                    first
+                );
+                return Some(first);
             }
         }
 
@@ -368,14 +396,16 @@ impl MtgaDb {
         // `other_mtga_card_with_same_name_and_art_id` returns 2 objects but cannot resolve a card before arriving here
         if !was_last_resort {
             println!(
-                "Trying last resort for: #{}, {} ({}/{}) ({})",
+                "Trying last resort for: #{}, {} ({} or {}/{}) ({}), is_alchemy: {}",
                 mtga_card.arena_id(),
                 mtga_card_name,
                 mtga_card.set(),
+                mtga_card.non_alchemy_set(),
                 mtga_card.collector_number(),
                 MtgaDb::map_lowercase_mtga_artist_name_to_scry(
                     mtga_card.lowercase_artist().as_str()
-                )
+                ),
+                mtga_card.is_alchemy_card()
             );
 
             let results = scry_cards_db
@@ -397,9 +427,10 @@ impl MtgaDb {
                 1 => {
                     let scry_card = results[0];
                     println!(
-                        "warning: {} ({}/{}) is not {}",
+                        "warning: {} ({} or {}/{}) is not {}",
                         mtga_card_name,
                         mtga_card.set(),
+                        mtga_card.non_alchemy_set(),
                         mtga_card.collector_number(),
                         scry_card
                     );
@@ -416,21 +447,34 @@ impl MtgaDb {
                     let scry_card_names: Vec<String> =
                         results.iter().map(|c| c.to_string()).collect();
                     let scry_card_names = scry_card_names.join(", ");
-                    panic!("warning: searching for {} ({}/{}) ({}) resulted these possible cards in the scry_db: {}",
+                    println!("warning: searching for {} ({} or {}/{}) ({}) resulted these possible cards in the scry_db: {}",
                                     mtga_card_name,
                                     mtga_card.set(),
+                                    mtga_card.non_alchemy_set(),
                                     mtga_card.collector_number(),
                                     MtgaDb::map_lowercase_mtga_artist_name_to_scry(mtga_card.lowercase_artist().as_str()),
                                     scry_card_names);
+
+                    let first = results.first().unwrap();
+                    println!(
+                        "taking the first: {} ({} or {}/{}) is not {}",
+                        mtga_card_name,
+                        mtga_card.set(),
+                        mtga_card.non_alchemy_set(),
+                        mtga_card.collector_number(),
+                        first
+                    );
+                    return Some(first);
                 }
             }
         }
 
         println!(
-            "I dont know what to do with this: #{}, {} ({}/{}) ({})",
+            "I dont know what to do with this: #{}, {} ({} or {}/{}) ({})",
             mtga_card.arena_id(),
             mtga_card_name,
             mtga_card.set(),
+            mtga_card.non_alchemy_set(),
             mtga_card.collector_number(),
             MtgaDb::map_lowercase_mtga_artist_name_to_scry(mtga_card.lowercase_artist().as_str())
         );
@@ -569,7 +613,7 @@ impl MtgaDb {
             "佐久間友香 / yuka sakuma" => "yuka sakuma",
             "石川健太/ishikawa kenta" => "ishikawa kenta",
             "出利/syutsuri" => "syutsuri",
-            "п猫ｒ/penekor" => "penekor",
+            "п猫ｒ/penekor" => "pe-nekor",
             "あんべ よしろう/yoshiro ambe" => "yoshiro ambe",
             "萩谷薫/kaoru hagiya" => "hagiya kaoru",
             "萩谷薫 / kaoru hagiya" => "hagiya kaoru",
@@ -644,6 +688,17 @@ impl MtgaDb {
             "nestor ossandon leal" => "néstor ossandón leal",
             "dan scott" => "dan murayama scott",
             "zuzanna wuzyk" => "zuzanna wużyk",
+            "龍渕はく/haku tatsufuchi" => "haku tatsufuchi",
+            "オサフネオウジ/o-g osahune" => "o-g osahune",
+            "豆沢/mamezawa" => "mamezawa",
+            "山崎太郎/taro yamazaki" => "taro yamazaki",
+            "ｍｉｎａｔｏ" => "m i n a t o",
+            "乃希/noki" => "noki",
+            "ゆずしお/yuzushio" => "yuzushio",
+            "吉久愛莉/airi yoshihisa" => "airi yoshihisa",
+            "村上一世 / issei murakami" => "issei murakami",
+            "古澤あつし/atsushi furusawa" => "atsushi furusawa",
+            "fang.xinyu" => "fang xinyu",
             _ => mtga_artist_name,
         }
     }
@@ -1156,9 +1211,8 @@ impl MtgaDb {
             "xln" | "rix" | "dom" | "m19" | "grn" | "rna" | "war" | "m20" | "eld" | "thb"
             | "iko" | "m21" | "stx" | "neo" | "mkm" => Ok((7.0 / 8.0, 1.0 / 8.0)), // 1:8
             "znr" | "khm" | "mid" | "vow" => Ok((6.4 / 7.4, 1.0 / 7.4)), // 1:7.4
-            "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" | "woe" | "otj" => {
-                Ok((6.0 / 7.0, 1.0 / 7.0))
-            } // 1:7
+            "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" | "woe" | "otj"
+            | "mh3" | "blb" => Ok((6.0 / 7.0, 1.0 / 7.0)), // 1:7
             "lci" => Ok((5.8 / 6.8, 1.0 / 6.8)),                         // 1:6.8
             "akr" => Ok((5.0 / 6.0, 1.0 / 6.0)),                         // 1:6
             "bro" => Ok((4.8 / 5.8, 1.0 / 5.8)),                         // 1:5.8

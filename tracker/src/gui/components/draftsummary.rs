@@ -223,7 +223,7 @@ impl DraftSummaryComponent {
     {
         DraftSummaryComponent {
             database: MtgaDb::new(database_path),
-            selected_set: String::from("otj"),
+            selected_set: String::from("blb"),
             display_user_session: None,
             model: DraftSummaryModel::default(),
         }

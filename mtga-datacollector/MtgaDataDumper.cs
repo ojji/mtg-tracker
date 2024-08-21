@@ -46,7 +46,8 @@ namespace mtga_datacollector
             "RIX", "DAR" /* this is "DOM" they just renamed it for some reason */, "M19", "GRN", "RNA", "WAR", "M20", "ELD", "THB", "IKO", "M21", "JMP",
             "AKR", "ZNR", "KLR", "KHM", "STX", "STA", "AFR", "MH1", "MH2", "J21", "MID", "Y22-MID" /* YMID in scry */,
             "VOW", "NEO", "Y22-NEO", "SNC", "Y22-SNC", "HBG", "DMU", "Y23-DMU" /* YDMU in scry */,
-            "BRO", "Y23-BRO", "BRR", "EA2", "ONE", "Y23-ONE", "SIR", "SIS", "MOM", "MUL", "MAT", "LTR", "AHA7", "EA3", "WOE", "WOT", "Y24-WOE", "LCI", "Y24-LCI", "KTK", "MKM", "Y24-MKM", "OTJ", "SPG-MKM", "SPG-OTJ"
+            "BRO", "Y23-BRO", "BRR", "EA2", "ONE", "Y23-ONE", "SIR", "SIS", "MOM", "MUL", "MAT", "LTR", "AHA7", "EA3", "WOE", "WOT", "Y24-WOE", "LCI", "Y24-LCI", "KTK", "MKM", "Y24-MKM", "OTJ", "SPG-MKM", "SPG-OTJ", "MH3", "SPG-MH3",
+            "BLB", "SPG-BLB",
           };
 
           var setsWithCards = new Dictionary<string, List<CardPrintingData>>();
@@ -193,6 +194,8 @@ namespace mtga_datacollector
         case "AHA7": return "ha7";
         case "SPG-OTJ": return "spg";
         case "SPG-MKM": return "spg";
+        case "SPG-MH3": return "spg";
+        case "SPG-BLB": return "spg";
         default: return arenaSetName.ToLower();
       }
     }

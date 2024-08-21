@@ -1643,6 +1643,8 @@ impl BoosterStack {
             100042 => String::from("ktk"),
             100043 => String::from("mkm"),
             100044 => String::from("otj"),
+            100045 => String::from("mh3"),
+            100046 => String::from("blb"),
             200001 => String::from("kld_draft"),
             200002 => String::from("aer_draft"),
             200003 => String::from("akh_draft"),
@@ -1685,6 +1687,8 @@ impl BoosterStack {
             200042 => String::from("ktk_draft"),
             200043 => String::from("mkm_draft"),
             200044 => String::from("otj_draft"),
+            200045 => String::from("mh3_draft"),
+            200046 => String::from("blb_draft"),
             300000 => String::from("cube"),
             300001 => String::from("tinkererscube"),
             300002 => String::from("chromaticcube"),
@@ -1707,6 +1711,8 @@ impl BoosterStack {
             400040 => String::from("y24_woe"),
             400041 => String::from("y24_lci"),
             400043 => String::from("y24_mkm"),
+            400044 => String::from("y24_otj"),
+            400046 => String::from("y24_blb"),
             500000 => String::from("mythic"),
             500015 => String::from("eld_mythic"),
             500016 => String::from("thb_mythic"),
@@ -1732,6 +1738,8 @@ impl BoosterStack {
             500042 => String::from("ktk_mythic"),
             500043 => String::from("mkm_mythic"),
             500044 => String::from("otj_mythic"),
+            500045 => String::from("mh3_mythic"),
+            500046 => String::from("blb_mythic"),
             600028 => String::from("y22_snc_draft"),
             600030 => String::from("y23_dmu_draft"),
             600031 => String::from("y23_bro_draft"),
@@ -1739,6 +1747,8 @@ impl BoosterStack {
             600040 => String::from("y24_woe_draft"),
             600041 => String::from("y24_lci_draft"),
             600043 => String::from("y24_mkm_draft"),
+            600044 => String::from("y24_otj_draft"),
+            600046 => String::from("y24_blb_draft"),
             700028 => String::from("snc_rebalanced"),
             900980 => String::from("goldenbooster_standard"),
             999999 => String::from("futuresetplaceholder"),
@@ -1758,14 +1768,7 @@ pub struct CollectedCard {
 #[serde(rename_all = "camelCase")]
 pub struct MtgaCard {
     name: String,
-
-    #[serde(default)]
-    scry_name: String,
     set: String,
-
-    #[serde(default)]
-    scry_set: String,
-
     arena_id: u32,
     is_primary_card: bool,
     is_main_set: bool,
@@ -1782,9 +1785,6 @@ pub struct MtgaCard {
     collector_number: String,
     linked_face_type: String,
     max_collected: u32,
-
-    #[serde(default)]
-    scry_uri: Uri,
 }
 
 impl MtgaCard {
@@ -1800,8 +1800,26 @@ impl MtgaCard {
         self.artist.to_lowercase()
     }
 
-    pub fn set(&self) -> &str {
-        &self.set
+    pub fn set(&self) -> String {
+        if self.is_alchemy_card() && self.set.contains('-') {
+            format!("y{}", &self.set[4..])
+        } else {
+            self.set.clone()
+        }
+    }
+
+    pub fn non_alchemy_set(&self) -> &str {
+        if self.is_alchemy_card() && self.set.contains('-') {
+            &self.set[4..]
+        } else if self.is_alchemy_card() {
+            &self.set[1..]
+        } else {
+            &self.set
+        }
+    }
+
+    pub fn is_alchemy_card(&self) -> bool {
+        self.set.starts_with("y")
     }
 
     pub fn linked_faces(&self) -> &[u32] {

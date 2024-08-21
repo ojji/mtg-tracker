@@ -1,3 +1,5 @@
+pub const BLB_SYMBOL: &[u8] = include_bytes!("../assets/symbols/blb_40x40.png");
+pub const MH3_SYMBOL: &[u8] = include_bytes!("../assets/symbols/mh3_65x40.png");
 pub const OTJ_SYMBOL: &[u8] = include_bytes!("../assets/symbols/otj_74x40.png");
 pub const MKM_SYMBOL: &[u8] = include_bytes!("../assets/symbols/mkm_40x40.png");
 pub const LCI_SYMBOL: &[u8] = include_bytes!("../assets/symbols/lci_56x40.png");
