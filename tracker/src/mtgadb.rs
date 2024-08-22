@@ -483,34 +483,34 @@ impl MtgaDb {
 
     fn get_mtga_card_name(mtga_cards_db: &[MtgaCard], mtga_card: &MtgaCard) -> String {
         let full_card_name = match mtga_card.linked_face_type() {
-            "LinkedFace_AdventureChild" => {
+            "AdventureChild" => {
                 let adventure_pair = mtga_cards_db
                     .iter()
                     .find(|&card| {
                         card.linked_faces().contains(&mtga_card.arena_id())
-                            && card.linked_face_type() == "LinkedFace_AdventureParent"
+                            && card.linked_face_type() == "AdventureParent"
                     })
                     .unwrap();
 
                 format!(r"{} // {}", &mtga_card.name(), &adventure_pair.name())
             }
-            "LinkedFace_MDFC_Back" => {
+            "MdfcBack" => {
                 let mdfc_pair = mtga_cards_db
                     .iter()
                     .find(|&card| {
                         card.linked_faces().contains(&mtga_card.arena_id())
-                            && card.linked_face_type() == "LinkedFace_MDFC_Front"
+                            && card.linked_face_type() == "MdfcFront"
                     })
                     .unwrap();
 
                 format!(r"{} // {}", &mtga_card.name(), &mdfc_pair.name())
             }
-            "LinkedFace_DFC_Back" => {
+            "DfcBack" => {
                 let dfc_pair = mtga_cards_db
                     .iter()
                     .find(|&card| {
                         card.linked_faces().contains(&mtga_card.arena_id())
-                            && card.linked_face_type() == "LinkedFace_DFC_Front"
+                            && card.linked_face_type() == "DfcFront"
                     })
                     .unwrap();
 
