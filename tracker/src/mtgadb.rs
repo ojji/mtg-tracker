@@ -665,7 +665,6 @@ impl MtgaDb {
             "飯沼ゆうき/iinuma yuuki" => "iinuma yuuki",
             "古海鐘一/showichi furumi　" => "showichi furumi",
             "大熊まい/mai okuma" => "mai okuma",
-            "qianjiao ma" => "qianhao ma",
             "やこたこす/yakotakos" => "yakotakos",
             "ジゼロ/zizero" => "zizero",
             "呉々/kuregure" => "kuregure",
@@ -693,6 +692,13 @@ impl MtgaDb {
             "村上一世 / issei murakami" => "issei murakami",
             "古澤あつし/atsushi furusawa" => "atsushi furusawa",
             "fang.xinyu" => "fang xinyu",
+            "鈴木康士/d-suzuki" => "d-suzuki",
+            "かわすみ / kawasumi" => "kawasumi",
+            "竹内基/takeuchi moto" => "takeuchi moto",
+            "伊藤暢達/masahiro ito" => "masahiro ito",
+            "oliver barrett/atrbute" => "oliver barrett",
+            "riccardo federici " => "riccardo federici",
+            "増田幹生/mikio masuda" => "mikio masuda",
             _ => mtga_artist_name,
         }
     }
@@ -1206,7 +1212,7 @@ impl MtgaDb {
             | "iko" | "m21" | "stx" | "neo" | "mkm" => Ok((7.0 / 8.0, 1.0 / 8.0)), // 1:8
             "znr" | "khm" | "mid" | "vow" => Ok((6.4 / 7.4, 1.0 / 7.4)), // 1:7.4
             "klr" | "afr" | "snc" | "hbg" | "dmu" | "one" | "mom" | "ltr" | "woe" | "otj"
-            | "mh3" | "blb" => Ok((6.0 / 7.0, 1.0 / 7.0)), // 1:7
+            | "mh3" | "blb" | "dsk" => Ok((6.0 / 7.0, 1.0 / 7.0)), // 1:7
             "lci" => Ok((5.8 / 6.8, 1.0 / 6.8)),                         // 1:6.8
             "akr" => Ok((5.0 / 6.0, 1.0 / 6.0)),                         // 1:6
             "bro" => Ok((4.8 / 5.8, 1.0 / 5.8)),                         // 1:5.8
