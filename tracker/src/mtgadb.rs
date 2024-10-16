@@ -699,6 +699,7 @@ impl MtgaDb {
             "oliver barrett/atrbute" => "oliver barrett",
             "riccardo federici " => "riccardo federici",
             "増田幹生/mikio masuda" => "mikio masuda",
+            "縫典/nuisuke" => "nuisuke",
             _ => mtga_artist_name,
         }
     }

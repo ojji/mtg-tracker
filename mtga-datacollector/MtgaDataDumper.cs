@@ -47,7 +47,7 @@ namespace mtga_datacollector
             "AKR", "ZNR", "KLR", "KHM", "STX", "STA", "AFR", "MH1", "MH2", "J21", "MID", "Y22-MID" /* YMID in scry */,
             "VOW", "NEO", "Y22-NEO", "SNC", "Y22-SNC", "HBG", "DMU", "Y23-DMU" /* YDMU in scry */,
             "BRO", "Y23-BRO", "BRR", "EA2", "ONE", "Y23-ONE", "SIR", "SIS", "MOM", "MUL", "MAT", "LTR", "AHA7", "EA3", "WOE", "WOT", "Y24-WOE", "LCI", "Y24-LCI", "KTK", "MKM", "Y24-MKM", "OTJ", "SPG-MKM", "SPG-OTJ", "MH3", "SPG-MH3",
-            "BLB", "SPG-BLB", "Y25-BLB", "DSK", "SPG-DSK"
+            "BLB", "SPG-BLB", "Y25-BLB", "DSK", "SPG-DSK", "Y25-DSK"
           };
 
           var setsWithCards = new Dictionary<string, List<CardPrintingData>>();
@@ -198,6 +198,7 @@ namespace mtga_datacollector
         case "SPG-BLB": return "spg";
         case "SPG-DSK": return "spg";
         case "Y25-BLB": return "yblb";
+        case "Y25-DSK": return "ydsk";
         default: return arenaSetName.ToLower();
       }
     }
